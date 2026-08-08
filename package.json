@@ -22,6 +22,7 @@
   "bugs": {
     "url": "https://github.com/dcxv-com/dcxv-cli/issues"
   },
+  "license": "MIT",
   "type": "module",
   "bin": {
     "dcxv": "bin/dcxv.js"

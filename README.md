@@ -5,6 +5,7 @@
 ![Linux · macOS · Windows](https://img.shields.io/badge/platform-Linux%20%C2%B7%20macOS%20%C2%B7%20Windows-informational)
 ![Single binary](https://img.shields.io/badge/install-single%20binary-brightgreen)
 ![Node ≥ 18](https://img.shields.io/badge/node-%E2%89%A518-blue)
+![MIT license](https://img.shields.io/badge/license-MIT-green)
 
 List and inspect servers, order cloud servers and Kubernetes clusters, run power actions,
 reinstall an OS, manage snapshots, backups and ISO images, pay invoices, switch between
@@ -33,6 +34,7 @@ $ dcxv watch 2482
 - [Configuration](#configuration)
 - [Shell completions](#shell-completions)
 - [Contributing](#contributing)
+- [License](#license)
 
 ## What you can order
 
@@ -357,3 +359,7 @@ setup, test suites and release process.
 
 - Docs and downloads: <https://dcxv.com/cli>
 - Support: <support@dcxv.com> · Sales: <sales@dcxv.com>
+
+## License
+
+[MIT](LICENSE) © DCXV INTERNATIONAL LTD
