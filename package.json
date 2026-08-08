@@ -2,9 +2,29 @@
   "name": "dcxv",
   "version": "0.2.0",
   "description": "Command-line client for the DCXV GraphQL API (servers, orders, payments, live deploy progress).",
+  "keywords": [
+    "dcxv",
+    "cli",
+    "hosting",
+    "vps",
+    "cloud",
+    "dedicated-server",
+    "kubernetes",
+    "ipv4",
+    "devops",
+    "terminal"
+  ],
+  "homepage": "https://dcxv.com/cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dcxv-com/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dcxv-com/cli/issues"
+  },
   "type": "module",
   "bin": {
-    "dcxv": "./bin/dcxv.js"
+    "dcxv": "bin/dcxv.js"
   },
   "engines": {
     "node": ">=18"

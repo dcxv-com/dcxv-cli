@@ -92,9 +92,31 @@ a published binary and `dcxv version` can never disagree.
 4. Update the version on the download page. `release-sync` fails if it drifts from
    `package.json`.
 
-**npm**: `package.json` reserves the name `dcxv` with a `bin` entry, but the package is **not
-published** — `npx dcxv` does not work today. Either publish it or don't point users at it; both
-the README and `install.sh` previously offered it as a fallback, which was a dead end.
+### npm
+
+The package publishes as `dcxv`, so `npx dcxv` runs the CLI on any machine with Node ≥ 18 —
+the plain JavaScript client, not the compiled binary. `files` keeps the tarball to `bin/`,
+`src/` and the README (~36 kB, 10 files); tests, scripts and `dist/` are excluded.
+
+```bash
+npm publish --dry-run    # inspect the tarball; must warn about nothing but being logged out
+npm publish
+```
+
+Keep the version in step with the binaries: publish from the same commit you tagged and built,
+so `npx dcxv version` and the downloadable binary agree.
+
+Two things to know if you touch this:
+
+- `bin` must be `bin/dcxv.js` **without** a `./` prefix. npm rewrites `./bin/dcxv.js` on publish
+  and warns that it "was invalid and removed"; the entry survives, but keep the canonical form so
+  the warning stays gone (`npm pkg fix` does it for you).
+- `npx dcxv` needs Node, because it runs `src/` directly. If you ever want `npx` to fetch the
+  *compiled* binary instead, that means per-platform packages (`@dcxv/cli-linux-x64` and friends,
+  each with `os`/`cpu` set) as `optionalDependencies` of a small launcher — the model esbuild uses.
+  A `postinstall` downloader is the other option, but it breaks under `npm ci --ignore-scripts`
+  and in sandboxed installs. Neither is worth it while the client is a few files of JavaScript
+  with one dependency.
 
 ## Style
 

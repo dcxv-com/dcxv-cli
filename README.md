@@ -78,13 +78,23 @@ your `PATH`:
 | macOS (Intel) | `dcxv-macos-x64` |
 | Windows x64 | `dcxv-windows-x64.exe` |
 
+**Already have Node ≥ 18?** Run it without installing anything:
+
+```bash
+npx dcxv --help
+npm i -g dcxv        # or install it globally
+```
+
+The npm package is the same JavaScript client; the standalone binaries above just bundle a
+runtime so you don't need one.
+
 <details>
 <summary>From source</summary>
 
 Requires [Bun](https://bun.sh) or Node ≥ 18.
 
 ```bash
-git clone <this repo> && cd cli
+git clone https://github.com/dcxv-com/cli.git && cd cli
 bun install && bun link      # puts `dcxv` on your PATH
 ```
 
