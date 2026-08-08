@@ -1,0 +1,27 @@
+{
+  "name": "dcxv",
+  "version": "0.2.0",
+  "description": "Command-line client for the DCXV GraphQL API (servers, orders, payments, live deploy progress).",
+  "type": "module",
+  "bin": {
+    "dcxv": "./bin/dcxv.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node ./bin/dcxv.js",
+    "test": "bun test",
+    "lint": "eslint .",
+    "build": "bun build ./bin/dcxv.js --compile --outfile dist/dcxv",
+    "build:all": "bash scripts/build.sh"
+  },
+  "dependencies": {
+    "graphql-sse": "^2.6.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "dcxv-cli",
+      "dependencies": {
+        "graphql-sse": "^2.6.0",
+      },
+    },
+  },
+  "packages": {
+    "graphql": ["graphql@16.14.2", "", {}, "sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA=="],
+
+    "graphql-sse": ["graphql-sse@2.6.0", "", { "peerDependencies": { "graphql": ">=0.11 <=16" } }, "sha512-BXT5Rjv9UFunjQsmN9WWEIq+TFNhgYibgwo1xkXLxzguQVyOd6paJ4v5DlL9K5QplS0w74bhF+aUiqaGXZBaug=="],
+  }
+}
