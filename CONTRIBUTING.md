@@ -94,9 +94,15 @@ a published binary and `dcxv version` can never disagree.
 
 ### npm
 
-The package publishes as `dcxv`, so `npx dcxv` runs the CLI on any machine with Node ≥ 18 —
-the plain JavaScript client, not the compiled binary. `files` keeps the tarball to `bin/`,
-`src/` and the README (~36 kB, 10 files); tests, scripts and `dist/` are excluded.
+The package publishes as **`dcxv-cli`** while the command it installs stays **`dcxv`** — so
+`npx dcxv-cli` runs the CLI on any machine with Node ≥ 18. That is the plain JavaScript client,
+not the compiled binary. `files` keeps the tarball to `bin/`, `src/` and the README (~36 kB,
+10 files); tests, scripts and `dist/` are excluded.
+
+The bare name `dcxv` is **not** available: the registry has no such package, but publishing it is
+rejected with `403 … Package name too similar to existing packages dlv, docx, csv`. npm's
+similarity heuristic applies to short names regardless of whether the name is taken, so don't
+retry it — `dcxv-cli` is the published name.
 
 ```bash
 npm publish --dry-run    # inspect the tarball; must warn about nothing but being logged out
@@ -104,14 +110,14 @@ npm publish
 ```
 
 Keep the version in step with the binaries: publish from the same commit you tagged and built,
-so `npx dcxv version` and the downloadable binary agree.
+so `npx dcxv-cli version` and the downloadable binary agree.
 
 Two things to know if you touch this:
 
 - `bin` must be `bin/dcxv.js` **without** a `./` prefix. npm rewrites `./bin/dcxv.js` on publish
   and warns that it "was invalid and removed"; the entry survives, but keep the canonical form so
   the warning stays gone (`npm pkg fix` does it for you).
-- `npx dcxv` needs Node, because it runs `src/` directly. If you ever want `npx` to fetch the
+- `npx dcxv-cli` needs Node, because it runs `src/` directly. If you ever want `npx` to fetch the
   *compiled* binary instead, that means per-platform packages (`@dcxv/cli-linux-x64` and friends,
   each with `os`/`cpu` set) as `optionalDependencies` of a small launcher — the model esbuild uses.
   A `postinstall` downloader is the other option, but it breaks under `npm ci --ignore-scripts`

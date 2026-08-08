@@ -1,6 +1,6 @@
-# dcxv
+# dcxv-cli
 
-**Manage your DCXV servers, orders and payments from the terminal.**
+**Manage your DCXV servers, orders and payments from the terminal.** The command is `dcxv`.
 
 ![Linux · macOS · Windows](https://img.shields.io/badge/platform-Linux%20%C2%B7%20macOS%20%C2%B7%20Windows-informational)
 ![Single binary](https://img.shields.io/badge/install-single%20binary-brightgreen)
@@ -81,12 +81,12 @@ your `PATH`:
 **Already have Node ≥ 18?** Run it without installing anything:
 
 ```bash
-npx dcxv --help
-npm i -g dcxv        # or install it globally
+npx dcxv-cli --help
+npm i -g dcxv-cli        # or install it globally, then just `dcxv`
 ```
 
-The npm package is the same JavaScript client; the standalone binaries above just bundle a
-runtime so you don't need one.
+The package is `dcxv-cli`; the command it installs is `dcxv`. Same JavaScript client — the
+standalone binaries above simply bundle a runtime so you don't need one.
 
 <details>
 <summary>From source</summary>
@@ -94,7 +94,7 @@ runtime so you don't need one.
 Requires [Bun](https://bun.sh) or Node ≥ 18.
 
 ```bash
-git clone https://github.com/dcxv-com/cli.git && cd cli
+git clone https://github.com/dcxv-com/dcxv-cli.git && cd dcxv-cli
 bun install && bun link      # puts `dcxv` on your PATH
 ```
 
