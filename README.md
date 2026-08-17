@@ -349,7 +349,8 @@ dcxv completion fish > ~/.config/fish/completions/dcxv.fish
 
 ## Notes
 
-- The KVM console and web terminal are intentionally not exposed — they need a browser window.
+- The serial console is exposed as `dcxv console <id>`; the graphical (VNC) console still needs
+  a browser window, so `dcxv console <id> --vnc` opens it there instead of rendering it here.
 - Sensitive account changes (password, PIN, 2FA, account closure) are left to the web app.
 
 ## Contributing

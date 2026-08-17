@@ -85,17 +85,19 @@ a published binary and `dcxv version` can never disagree.
 
 ## Releasing
 
-1. Bump `version` in `package.json`.
+1. Bump `version` in `package.json` and commit.
 2. `bun test` must be green, then `bun run build:all`.
 3. Publish `dist/dcxv-*` and `dist/SHA256SUMS` to <https://dcxv.com/cli/> so `install.sh` can
    fetch them.
 4. Update the version on the download page. `release-sync` fails if it drifts from
    `package.json`.
+5. `gh release create vX.Y.Z --draft`, upload the same `dist/dcxv-*` + `dist/SHA256SUMS`, then
+   publish the release. That publish event is what triggers npm — see [npm](#npm) below.
 
 ### npm
 
 The package publishes as **`dcxv-cli`** while the command it installs stays **`dcxv`** — so
-`npx dcxv-cli` runs the CLI on any machine with Node ≥ 18. That is the plain JavaScript client,
+`npx dcxv-cli` runs the CLI on any machine with Node ≥ 20. That is the plain JavaScript client,
 not the compiled binary. `files` keeps the tarball to `bin/`, `src/` and the README (~36 kB,
 10 files); tests, scripts and `dist/` are excluded.
 
@@ -104,13 +106,20 @@ rejected with `403 … Package name too similar to existing packages dlv, docx, 
 similarity heuristic applies to short names regardless of whether the name is taken, so don't
 retry it — `dcxv-cli` is the published name.
 
-```bash
-npm publish --dry-run    # inspect the tarball; must warn about nothing but being logged out
-npm publish
-```
+**Publishing to npm is CI-driven, not manual.** `.github/workflows/publish.yml` runs on every
+*published* GitHub Release (`bun test`, then a check that `package.json`'s version matches the
+release tag, then `npm publish --provenance`). It authenticates via npm's Trusted Publishing
+(OIDC) — no `NPM_TOKEN` secret exists in this repo, so there is nothing to rotate or leak. The
+trust relationship is configured once on npm's side: <https://www.npmjs.com/package/dcxv-cli>
+→ Settings → Trusted Publisher → GitHub Actions, repo `dcxv-com/dcxv-cli`, workflow
+`publish.yml`. If that link is ever missing or points at the wrong workflow file, the job fails
+at the `npm publish` step with an auth error, not silently.
 
-Keep the version in step with the binaries: publish from the same commit you tagged and built,
-so `npx dcxv-cli version` and the downloadable binary agree.
+So the actual release flow is: bump `version` in `package.json` and commit → `bun run build:all`
+→ `gh release create vX.Y.Z --draft`, upload `dist/dcxv-*` + `dist/SHA256SUMS` → publish the
+draft release. Publishing the release is what triggers the npm publish; there is no separate
+manual `npm publish` step to remember (or forget). `npm publish --dry-run` locally is still
+useful to eyeball the tarball contents before tagging.
 
 Two things to know if you touch this:
 
