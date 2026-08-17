@@ -221,6 +221,11 @@ export function attachTerm({ wsUrl: target, jar, user, ticket, stdin, stdout, io
 export async function openConsole(client, { id, io, stdin, stdout }) {
   const session = await mintKvmSession(client, { id, type: 'TERM' })
   const { ticket, port, user } = await termproxy({ url: client.url, base: session.base, jar: session.jar })
+  // A serial getty (agetty on ttyS0/serial0) doesn't print its login banner until it
+  // sees a byte come in — it has no way to know a terminal is attached until then. A
+  // freshly-attached session that shows nothing is normal, not stuck; confirmed live
+  // (against this same test path) that pressing Enter immediately produces the prompt.
   io.err(`Attached to console for #${id} (node ${session.node}, vmid ${session.vmid}). Detach with Ctrl-].`)
+  io.err('If the screen stays blank, press Enter — the guest\'s console often waits for input before printing anything.')
   return attachTerm({ wsUrl: wsUrl(client.url, session.base, port, ticket), jar: session.jar, user, ticket, stdin, stdout, io })
 }
