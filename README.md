@@ -190,6 +190,8 @@ dcxv tx <id> invoice [outfile]       PDF invoice (prints the URL, saves it if gi
 dcxv pay [<method> <amount>]         Show methods, or create a payment
 dcxv sub [ls|add|login|exit]         Manage / switch into sub-accounts
 dcxv watch [<id>]                    Stream live deploy/task progress
+dcxv console <id>                    Attach to the serial console (Ctrl-] to detach);
+                                      --vnc opens the graphical console in a browser
 dcxv completion <bash|zsh|fish>      Print a shell completion script
 dcxv version                         Print the CLI version
 ```

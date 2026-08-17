@@ -8,6 +8,7 @@ import { hostname } from 'node:os'
 import { DcxvError } from './client.js'
 import { VERSION } from './version.js'
 import { tryOpenBrowser } from './browser.js'
+import { mintKvmUrl, mintKvmSession, termproxy, openConsole } from './console.js'
 import {
   color, money, ts, formatJson, formatTable, formatKeyVals, progressBar, parseProgress, endLine,
   parseStat, formatUptime, bytesHuman, sparkline, seriesStats,
@@ -88,6 +89,13 @@ Usage:
   dcxv sub add <email> <fname>                 Create a sub-account
   dcxv sub login <id> | exit                   Switch into / out of a sub-account
   dcxv watch [<id>]                            Stream live deploy/task progress
+  dcxv console <id>                            Attach to the serial console (Ctrl-] to
+                                                detach). Windows guests have no serial
+                                                port — use --vnc instead (opens the
+                                                branded web console in your browser;
+                                                VNC is graphical, it cannot render in a
+                                                terminal). --json prints connection
+                                                metadata instead of attaching.
   dcxv completion <bash|zsh|fish>              Print a shell completion script
   dcxv version                                 Print the CLI version
 
@@ -139,6 +147,7 @@ function parse(argv) {
       k8s: { type: 'string' },
       price: { type: 'boolean', default: false },
       watch: { type: 'boolean', default: false },
+      vnc: { type: 'boolean', default: false },
       yes: { type: 'boolean', short: 'y', default: false },
       version: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
@@ -187,7 +196,8 @@ async function dispatch(argv, deps, io) {
   }
 
   const cfg = config.loadConfig({ profile: flags.profile })
-  const client = makeClient({ url: flags.url ? flags.url.replace(/\/+$/, '') : cfg.url, token: cfg.token })
+  const baseUrl = flags.url ? flags.url.replace(/\/+$/, '') : cfg.url
+  const client = makeClient({ url: baseUrl, token: cfg.token })
 
   switch (cmd) {
     case 'whoami': return handleWhoami(client, flags, io)
@@ -210,6 +220,7 @@ async function dispatch(argv, deps, io) {
     case 'pay': return handlePay(client, positionals, flags, io)
     case 'sub': return handleSub(client, config, positionals, flags, io)
     case 'watch': return handleWatch(client, positionals[1], flags.json, io)
+    case 'console': return handleConsole(client, positionals, flags, io)
     default:
       io.out(HELP)
       throw new DcxvError(`Unknown command "${cmd}".`)
@@ -601,7 +612,7 @@ async function handleSet(client, positionals, flags, io) {
       // so say that instead of leaving a watcher waiting on progress that will never come.
       if (!flags.json && !r.ret) io.err(color.yellow(
         `Warning: the server did not acknowledge the reinstall — it may not be supported for this product type. Check "dcxv get ${id}".`))
-      if (flags.watch && !flags.json) return handleWatch(client, idNum, false, io)
+      if (flags.watch) return handleWatch(client, idNum, flags.json, io)
       return
     }
     default:
@@ -1286,6 +1297,38 @@ function handleProfile(config, positionals, flags, io) {
 const WATCH_IDLE_SEC = () => Number(process.env.DCXV_WATCH_IDLE_SEC || 5)
 const WATCH_SILENT_SEC = () => Number(process.env.DCXV_WATCH_SILENT_SEC || 60)
 
+// `dcxv console <id>`: attach to the VM's serial console (termproxy), or with --vnc
+// mint a graphical-console URL and open it in a browser (VNC is a framebuffer — it
+// cannot be rendered in a terminal). --json mints the session and prints connection
+// metadata instead of attaching, for scripting/debugging.
+async function handleConsole(client, positionals, flags, io) {
+  const id = need(positionals[1], 'dcxv console <id>', 'dcxv console 123')
+  const idNum = Number(id)
+
+  if (flags.vnc) {
+    const url = await mintKvmUrl(client, { id: idNum, type: 'KVM' })
+    if (flags.json) return void io.out(formatJson({ url }))
+    io.out(color.green('Opening the graphical console in your browser…'))
+    io.out(color.dim(url))
+    tryOpenBrowser(url)
+    return 0
+  }
+
+  if (flags.json) {
+    const session = await mintKvmSession(client, { id: idNum, type: 'TERM' })
+    const { ticket, port, user } = await termproxy({ url: client.url, base: session.base, jar: session.jar })
+    io.out(formatJson({ node: session.node, vmid: session.vmid, sid: session.sid, port, user, ticket }))
+    return 0
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new DcxvError('dcxv console requires an interactive terminal. Use --json to fetch connection metadata instead.')
+  }
+
+  await openConsole(client, { id: idNum, io, stdin: process.stdin, stdout: process.stdout })
+  return 0
+}
+
 function handleWatch(client, filterId, json, io, { onDone } = {}) {
   return new Promise((resolve, reject) => {
     let finished = false
@@ -1372,7 +1415,7 @@ function handleWatch(client, filterId, json, io, { onDone } = {}) {
 
 // -------------------------------------------------------------- completions
 
-const COMMANDS = 'login config profile whoami account balance orders products ls list os clusters order get set rm transactions txns history tx pay sub watch completion version help'
+const COMMANDS = 'login config profile whoami account balance orders products ls list os clusters order get set rm transactions txns history tx pay sub watch console completion version help'
 
 export function completionScript(shell) {
   switch (shell) {

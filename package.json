@@ -28,7 +28,7 @@
     "dcxv": "bin/dcxv.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "files": [
     "bin",
@@ -43,6 +43,7 @@
     "build:all": "bash scripts/build.sh"
   },
   "dependencies": {
-    "graphql-sse": "^2.6.0"
+    "graphql-sse": "^2.6.0",
+    "ws": "^8.18.0"
   }
 }
