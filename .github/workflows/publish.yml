@@ -39,12 +39,16 @@ jobs:
             exit 1
           fi
 
+      # `package.json`'s own `engines` only requires Node >= 20 for the published
+      # package, but the publish JOB needs a newer runtime: the latest npm CLI (needed
+      # below for OIDC trusted publishing) itself now requires Node ^22.22 / ^24.15 / >=26
+      # to even install, which Node 20 cannot satisfy.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       # npm's OIDC trusted-publishing support requires a recent CLI; the one bundled
-      # with actions/setup-node's Node 20 image can lag behind.
+      # with actions/setup-node's image can lag behind.
       - run: npm install -g npm@latest
 
       - run: npm publish --provenance
