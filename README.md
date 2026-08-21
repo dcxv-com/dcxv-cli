@@ -319,6 +319,13 @@ wrote (a server's hostname, notes, notice-to-client), which is a route for a mal
 instruction to reach an agent — a single flag isn't enough friction for anything that
 charges your account.
 
+**Server discovery.** This package is registered under the MCP name `com.dcxv/dcxv-cli`
+(`package.json`'s `mcpName`, matching `server.json` at the repo root — the manifest the
+[MCP registry](https://github.com/modelcontextprotocol/registry) publisher CLI reads).
+`https://dcxv.com/.well-known/mcp/server-card.json` serves the same description live: an
+npm-distributed, stdio-only server with no hosted endpoint — there is deliberately no
+`remotes` entry anywhere in that description, because none exists.
+
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}

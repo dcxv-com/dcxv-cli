@@ -23,6 +23,7 @@
     "url": "https://github.com/dcxv-com/dcxv-cli/issues"
   },
   "license": "MIT",
+  "mcpName": "com.dcxv/dcxv-cli",
   "type": "module",
   "bin": {
     "dcxv": "bin/dcxv.js"
