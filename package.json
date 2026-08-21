@@ -1,6 +1,6 @@
 {
   "name": "dcxv-cli",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Command-line client for the DCXV GraphQL API (servers, orders, payments, live deploy progress).",
   "keywords": [
     "dcxv",
