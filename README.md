@@ -30,6 +30,7 @@ $ dcxv watch 2482
 - [Authentication](#authentication)
 - [Commands](#commands)
 - [Ordering a server](#ordering-a-server)
+- [Using DCXV with an MCP client](#using-dcxv-with-an-mcp-client)
 - [Examples](#examples)
 - [Configuration](#configuration)
 - [Shell completions](#shell-completions)
@@ -194,6 +195,9 @@ dcxv console <id>                    Attach to the serial console (Ctrl-] to det
                                       --vnc opens the graphical console in a browser
 dcxv completion <bash|zsh|fish>      Print a shell completion script
 dcxv version                         Print the CLI version
+
+dcxv mcp [--allow-write]             Run a local MCP server over stdio for an MCP-aware
+         [--allow-billing]           agent (see "Using DCXV with an MCP client" below)
 ```
 
 Two global flags matter everywhere:
@@ -276,6 +280,50 @@ dcxv order --spec @order.json --yes
 ```
 
 </details>
+
+## Using DCXV with an MCP client
+
+`dcxv mcp` runs a local [Model Context Protocol](https://modelcontextprotocol.io) server over
+stdio, so an MCP-aware agent (Claude Code, Claude Desktop, etc.) can use this same
+already-authenticated session — there is no hosted DCXV MCP endpoint and no separate login;
+whatever `dcxv login` already saved is what the server uses.
+
+Add it to your client's MCP config (Claude Code: `.mcp.json`; Claude Desktop:
+`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "dcxv": {
+      "command": "dcxv",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**Tool tiers, gated by flag:**
+
+| Tier | Flag | Tools |
+|---|---|---|
+| Public | (none) | `search_products`, `get_product`, `list_locations` — no login required |
+| Read-only | (none, once logged in) | `whoami`, `get_account`, `balance`, `list_orders`, `get_order`, `list_os`, `list_clusters`, `list_transactions` |
+| Write | `--allow-write` | `set_power`, `rename_order`, `lock_order`, `unlock_order` — reversible, never charges the account |
+| Billing | `--allow-write --allow-billing` + `DCXV_MCP_ALLOW_BILLING=1` | `create_order` (price-check only unless `confirm: true`), `renew_order` |
+
+`rm`, `pay`, `account set`/`export`, `sub login` and `watch` are **never** exposed as MCP
+tools, at any flag combination — the same destructive/irreversible/streaming set this CLI
+already treats carefully everywhere else. The billing tier needs both a flag and an
+environment variable on purpose: a tool result can echo back free text you or a colleague
+wrote (a server's hostname, notes, notice-to-client), which is a route for a malicious
+instruction to reach an agent — a single flag isn't enough friction for anything that
+charges your account.
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"whoami","arguments":{}}}
+```
 
 ## Examples
 

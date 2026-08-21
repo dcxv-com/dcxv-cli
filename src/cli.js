@@ -9,6 +9,7 @@ import { DcxvError } from './client.js'
 import { VERSION } from './version.js'
 import { tryOpenBrowser } from './browser.js'
 import { mintKvmUrl, mintKvmSession, termproxy, openConsole } from './console.js'
+import { runMcpServer, defaultStdioIo } from './mcp.js'
 import {
   color, money, ts, formatJson, formatTable, formatKeyVals, progressBar, parseProgress, endLine,
   parseStat, formatUptime, bytesHuman, sparkline, seriesStats,
@@ -98,6 +99,14 @@ Usage:
                                                 metadata instead of attaching.
   dcxv completion <bash|zsh|fish>              Print a shell completion script
   dcxv version                                 Print the CLI version
+  dcxv mcp [--allow-write] [--allow-billing]   Run a local MCP server over stdio for an
+                                                MCP-aware agent, reusing this session's
+                                                login. Read-only by default; --allow-write
+                                                adds reversible actions (power/rename/
+                                                lock); --allow-billing (+ env var
+                                                DCXV_MCP_ALLOW_BILLING=1) adds actions that
+                                                charge the account. rm/pay/account set or
+                                                export/sub login/watch are never exposed.
 
 Global flags:
   --json         Machine-readable JSON output
@@ -151,6 +160,9 @@ function parse(argv) {
       yes: { type: 'boolean', short: 'y', default: false },
       version: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
+      // `dcxv mcp` gates - see src/mcp.js.
+      'allow-write': { type: 'boolean', default: false },
+      'allow-billing': { type: 'boolean', default: false },
     },
   })
 }
@@ -191,6 +203,18 @@ async function dispatch(argv, deps, io) {
       const script = completionScript(positionals[1])
       if (!script) throw new DcxvError('Usage: dcxv completion <bash|zsh|fish>')
       io.out(script)
+      return 0
+    }
+    case 'mcp': {
+      // No upfront client/token requirement - public tools (search_products etc.) work
+      // logged out, and every authenticated tool checks the token itself per-call (see
+      // src/mcp.js), the same "clear error, not a silent failure" contract as the rest
+      // of this CLI when DCXV_TOKEN/login is missing.
+      const mcpFlags = {
+        profile: flags.profile, url: flags.url,
+        allowWrite: flags['allow-write'], allowBilling: flags['allow-billing'],
+      }
+      await runMcpServer(deps, mcpFlags, deps.mcpIo || defaultStdioIo())
       return 0
     }
   }
@@ -486,6 +510,12 @@ async function handleGet(client, positionals, flags, io) {
       if (outfile) {
         writeFileSync(outfile, productId.k8sKubeconfig)
         io.out(color.green(`Kubeconfig written to ${outfile}`))
+      } else if (flags.json) {
+        // Previously ignored --json entirely and always wrote the raw YAML - harmless for
+        // a human piping to a file, but `dcxv mcp`'s get_order tool always requests --json
+        // and JSON.parse()s the result (see src/mcp.js), so this silently broke the
+        // "kubeconfig" action of that tool with a misleading parse-error message.
+        io.out(formatJson({ kubeconfig: productId.k8sKubeconfig }))
       } else {
         io.out(productId.k8sKubeconfig)
       }
@@ -1415,7 +1445,7 @@ function handleWatch(client, filterId, json, io, { onDone } = {}) {
 
 // -------------------------------------------------------------- completions
 
-const COMMANDS = 'login config profile whoami account balance orders products ls list os clusters order get set rm transactions txns history tx pay sub watch console completion version help'
+const COMMANDS = 'login config profile whoami account balance orders products ls list os clusters order get set rm transactions txns history tx pay sub watch console mcp completion version help'
 
 export function completionScript(shell) {
   switch (shell) {
