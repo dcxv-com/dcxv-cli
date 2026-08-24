@@ -14,9 +14,12 @@ import { M_PRODUCT_SET } from './queries.js'
 
 export class ConsoleError extends DcxvError {}
 
-// api-kvm's Set-Cookie headers (PVEAuthCookie, cs, pvecsrf) -> a Cookie request header
-// value. Keep values exactly as sent — api-kvm's readCookie() compares raw, percent-
-// encoded strings, so decoding here would break the signature check on the other end.
+// api-kvm's Set-Cookie headers (cs = the signed node|vmid capability, ks = an opaque
+// handle into its session vault) -> a Cookie request header value. Keep values exactly
+// as sent — api-kvm's readCookie() compares raw strings, so touching them would break
+// the signature check on the other end. Take whatever it sends and forward it: the set
+// has changed once already (it used to include the PVE ticket itself) and the empty
+// Max-Age=0 scrub cookies it currently emits are harmless to carry.
 export function parseSetCookie(list) {
   if (!list?.length) throw new ConsoleError('Console gateway did not set any session cookies (empty Set-Cookie).')
   let path = null

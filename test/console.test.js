@@ -25,14 +25,22 @@ describe('frameData / frameResize', () => {
 })
 
 describe('parseSetCookie', () => {
-  test('builds a jar preserving percent-encoding and extracts Path', () => {
+  // What api-kvm sends today: cs (signed node|vmid) + ks (an opaque handle into its
+  // session vault) + two Max-Age=0 scrubs revoking the credential cookies older
+  // builds planted. The parser is deliberately dumb about which names it gets - that
+  // set has already changed once and it must keep forwarding whatever arrives.
+  test('builds a jar from whatever api-kvm sends and extracts Path', () => {
     const { jar, path } = parseSetCookie([
-      'PVEAuthCookie=PVE%3A...%3A%2Bsig==; Path=/api2/json/nodes/cc1/qemu/1313; HttpOnly; Secure; SameSite=Lax',
       'cs=1234.abcdef; Path=/api2/json/nodes/cc1/qemu/1313; HttpOnly; Secure; SameSite=Lax',
-      'pvecsrf=TOKEN; Path=/api2/json/nodes/cc1/qemu/1313; HttpOnly; Secure; SameSite=Lax',
+      'ks=' + 'a'.repeat(64) + '; Path=/api2/json/nodes/cc1/qemu/1313; HttpOnly; Secure; SameSite=Lax',
+      'PVEAuthCookie=; Path=/api2/json/nodes/cc1/qemu/1313; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
     ])
-    expect(jar).toBe('PVEAuthCookie=PVE%3A...%3A%2Bsig==; cs=1234.abcdef; pvecsrf=TOKEN')
+    expect(jar).toBe('cs=1234.abcdef; ks=' + 'a'.repeat(64) + '; PVEAuthCookie=')
     expect(path).toBe('/api2/json/nodes/cc1/qemu/1313')
+  })
+  test('values are forwarded byte-for-byte (api-kvm compares raw strings)', () => {
+    const { jar } = parseSetCookie(['cs=1234.ab%2Bcd; Path=/api2/json/nodes/cc1/qemu/1313'])
+    expect(jar).toBe('cs=1234.ab%2Bcd')
   })
   test('throws on an empty Set-Cookie list', () => {
     expect(() => parseSetCookie([])).toThrow(DcxvError)
@@ -107,15 +115,14 @@ describe('mintKvmSession error mapping', () => {
     globalThis.fetch = async () => jsonRes(302, null, {
       location: '/my/orders/9/console?node=cc1&vmid=1313&type=term',
       'set-cookie': [
-        'PVEAuthCookie=TICKET; Path=/api2/json/nodes/cc1/qemu/1313',
         'cs=1234.sig; Path=/api2/json/nodes/cc1/qemu/1313',
-        'pvecsrf=CSRF; Path=/api2/json/nodes/cc1/qemu/1313',
+        'ks=deadbeef; Path=/api2/json/nodes/cc1/qemu/1313',
       ],
     })
     const s = await mintKvmSession(client, { id: 1313 })
     expect(s).toEqual({
       node: 'cc1', vmid: '1313', sid: '9', type: 'term',
-      jar: 'PVEAuthCookie=TICKET; cs=1234.sig; pvecsrf=CSRF',
+      jar: 'cs=1234.sig; ks=deadbeef',
       base: '/api2/json/nodes/cc1/qemu/1313',
     })
   })
