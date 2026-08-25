@@ -37,14 +37,18 @@ if [ "$1" = "--publish" ] && [ $# -eq 1 ]; then
   exit 0
 fi
 
-# 1) Bump version, regenerate src/version.js (build.sh does this), commit, push.
+# 1) Bump version, regenerate src/version.js + server.json (build.sh does both), commit, push.
 npm version "$BUMP" --no-git-tag-version
 VER="v$(node -p "require('./package.json').version")"
 echo "Bumped to $VER"
 
 bash scripts/build.sh
 
-git add package.json src/version.js
+# server.json belongs here: build.sh rewrites its two version fields, and leaving it
+# unstaged is exactly how v0.5.0 shipped a manifest still claiming 0.4.0. It had gone
+# unnoticed because server.json was created at 0.4.0, so the first release after it
+# happened to match.
+git add package.json src/version.js server.json
 git commit -m "chore: bump version to ${VER#v}"
 git push origin main
 
