@@ -1,6 +1,7 @@
 import { test, expect, describe, beforeEach, afterEach } from 'bun:test'
 import { WebSocketServer } from 'ws'
 import { PassThrough } from 'node:stream'
+import { readdirSync, readFileSync } from 'node:fs'
 import {
   parseSetCookie, parseKvmLocation, frameData, frameResize, FRAME_PING,
   mintKvmUrl, mintKvmSession, termproxy, wsUrl, attachTerm,
@@ -226,5 +227,30 @@ describe('attachTerm', () => {
       stdin, stdout, io: { err: () => {} },
     })).rejects.toThrow(/rejected the terminal credentials/)
     expect(stdin.rawMode).toBe(false)
+  })
+})
+
+// The console WebSocket used to pass `rejectUnauthorized: false` while the two fetch()
+// legs of the very same flow (mintKvmSession, termproxy) verified normally — against the
+// same host. It carries the api-kvm cookie jar and the one-shot termproxy ticket, so a
+// MITM on that leg got both, plus the customer's live console.
+//
+// Asserted against the source rather than a live handshake: the attachTerm tests above
+// speak plain ws:// to a local server, so TLS never enters them, and a real wss:// test
+// would need either a private key committed as a fixture or a new dev dependency (this
+// package deliberately has two runtime deps and none for development). This guard cannot
+// prove verification happens; it does stop the flag from quietly coming back. Same
+// source-assertion idiom as test/release-sync.test.js.
+describe('TLS verification is never disabled', () => {
+  // Comment-stripped, like release-sync.test.js's codeOf(): the rationale above names the
+  // flag it is banning, and a rule that its own explanation trips is a rule nobody keeps.
+  const codeOf = (js) => js.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+
+  test('no src/*.js opts out of certificate verification', () => {
+    const dir = new URL('../src/', import.meta.url).pathname
+    const offenders = readdirSync(dir)
+      .filter((f) => f.endsWith('.js'))
+      .filter((f) => /rejectUnauthorized|NODE_TLS_REJECT_UNAUTHORIZED/.test(codeOf(readFileSync(dir + f, 'utf8'))))
+    expect(offenders).toEqual([])
   })
 })

@@ -150,7 +150,15 @@ export function wsUrl(url, base, port, ticket) {
 // have to distinguish "user pressed Ctrl-]" from a real failure.
 export function attachTerm({ wsUrl: target, jar, user, ticket, stdin, stdout, io }) {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(target, 'binary', { headers: { cookie: jar }, rejectUnauthorized: false })
+    // TLS is verified here, like every other leg of this flow. This socket carries the
+    // api-kvm cookie jar (cs = the signed node|vmid capability, ks = the session handle)
+    // and the one-shot termproxy ticket sent on open below — and it goes to the SAME host
+    // mintKvmSession() and termproxy() already reached with a plain fetch(). Those verify
+    // and work, so there was never a certificate this had to tolerate; the flag that used
+    // to sit here (`rejectUnauthorized: false`) was inconsistency, not a design choice.
+    // Do not add it back: the host is pinned to https://dcxv.com (config.js), so a
+    // certificate that fails to verify on this path can only be someone else's.
+    const socket = new WebSocket(target, 'binary', { headers: { cookie: jar } })
     let connected = false
     let done = false
     let ping = null
