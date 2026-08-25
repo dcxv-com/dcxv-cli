@@ -1,4 +1,4 @@
-import { test, expect, describe } from 'bun:test'
+import { test, expect, describe, beforeEach, afterEach } from 'bun:test'
 import { run } from '../src/cli.js'
 import * as Q from '../src/queries.js'
 import { ts } from '../src/output.js'
@@ -1145,5 +1145,51 @@ describe('watch', () => {
     })
     expect(await exec(h, 'watch', '1')).toBe(0)
     expect(errStr(h)).toContain('done')
+  })
+})
+
+// The API host used to be movable three ways - the --url flag, DCXV_URL, and a per-profile
+// `url` - and the bearer token, the KVM console URL and the payment link all followed
+// wherever it pointed. All three are gone; these assert it stays that way.
+describe('the API host cannot be moved', () => {
+  let savedEnv
+  beforeEach(() => { savedEnv = process.env.DCXV_URL; delete process.env.DCXV_URL })
+  afterEach(() => { if (savedEnv === undefined) delete process.env.DCXV_URL; else process.env.DCXV_URL = savedEnv })
+
+  test('--url is refused, not ignored', async () => {
+    // Ignoring it would be worse than refusing: --url is no longer a declared option and
+    // parse() runs strict:false, so `orders --url https://x` would slide the URL into
+    // positionals and run a different command against dcxv.com without a word.
+    const h = harness()
+    expect(await exec(h, 'orders', '--url', 'https://attacker.example')).toBe(1)
+    expect(errStr(h)).toMatch(/--url was removed/)
+    expect(h.calls.length).toBe(0)
+  })
+
+  test('--url=<host> is refused too', async () => {
+    const h = harness()
+    expect(await exec(h, 'orders', '--url=https://attacker.example')).toBe(1)
+    expect(errStr(h)).toMatch(/--url was removed/)
+    expect(h.calls.length).toBe(0)
+  })
+
+  test('DCXV_URL is refused', async () => {
+    process.env.DCXV_URL = 'https://attacker.example'
+    const h = harness()
+    expect(await exec(h, 'orders')).toBe(1)
+    expect(errStr(h)).toMatch(/DCXV_URL is no longer honored/)
+    expect(h.calls.length).toBe(0)
+  })
+
+  test('login no longer persists a url alongside the token', async () => {
+    const h = harness()
+    expect(await exec(h, 'login', 'TOKV')).toBe(0)
+    expect(h.saved[0].patch).toEqual({ token: 'TOKV', subToken: null })
+  })
+
+  test('the refusal fires before dispatch, so even help/version do not mask it', async () => {
+    const h = harness()
+    expect(await exec(h, '--url=https://attacker.example', 'version')).toBe(1)
+    expect(errStr(h)).toMatch(/--url was removed/)
   })
 })

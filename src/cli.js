@@ -27,7 +27,7 @@ import {
 export const HELP = `dcxv — DCXV command-line client (v${VERSION})
 
 Usage:
-  dcxv login [<token>] [--profile p] [--url u] With no token: opens your browser to approve
+  dcxv login [<token>] [--profile p]          With no token: opens your browser to approve
                                                 this device and saves the token automatically.
                                                 With a token: saves it directly (create one at
                                                 /my/api).
@@ -111,7 +111,6 @@ Usage:
 Global flags:
   --json         Machine-readable JSON output
   --profile <p>  Use a named profile (or DCXV_PROFILE)
-  --url <u>      Override base URL (or DCXV_URL; default https://dcxv.com)
   --yes, -y      Confirm destructive/billing actions
   --watch        With --yes on order/reinstall: stream progress right after (like
                  running "dcxv watch <id>" immediately afterward)
@@ -139,7 +138,6 @@ function parse(argv) {
     strict: false,
     options: {
       json: { type: 'boolean', default: false },
-      url: { type: 'string' },
       profile: { type: 'string' },
       set: { type: 'string', multiple: true },
       spec: { type: 'string' },
@@ -167,7 +165,23 @@ function parse(argv) {
   })
 }
 
+// The API host is fixed (see config.js). Both former overrides are rejected out loud
+// rather than ignored: `--url` is no longer a declared option, and parse() runs with
+// strict:false, so `dcxv orders --url https://x` would otherwise slide the URL into
+// positionals and quietly run a different command against dcxv.com. A caller who still
+// passes either one believes they are talking to their own host - they need to be told
+// they are not.
+function rejectUrlOverride(argv) {
+  if (argv.some((a) => a === '--url' || a.startsWith('--url='))) {
+    throw new DcxvError('--url was removed: dcxv only ever talks to https://dcxv.com.')
+  }
+  if (process.env.DCXV_URL) {
+    throw new DcxvError('DCXV_URL is no longer honored: dcxv only ever talks to https://dcxv.com.\nUnset it to continue.')
+  }
+}
+
 async function dispatch(argv, deps, io) {
+  rejectUrlOverride(argv)
   const { values: flags, positionals } = parse(argv)
   const { config, makeClient } = deps
   const cmd = positionals[0]
@@ -182,7 +196,7 @@ async function dispatch(argv, deps, io) {
       if (argToken) {
         // Clear any active sub-account token so re-authenticating a profile can't
         // silently leave you inside a previously-entered sub-account.
-        const path = config.saveConfig({ token: argToken, url: flags.url, subToken: null }, { profile: flags.profile })
+        const path = config.saveConfig({ token: argToken, subToken: null }, { profile: flags.profile })
         io.out(color.green(`Saved token to ${path}` + (flags.profile ? ` (profile ${flags.profile})` : '')))
         return 0
       }
@@ -211,7 +225,7 @@ async function dispatch(argv, deps, io) {
       // src/mcp.js), the same "clear error, not a silent failure" contract as the rest
       // of this CLI when DCXV_TOKEN/login is missing.
       const mcpFlags = {
-        profile: flags.profile, url: flags.url,
+        profile: flags.profile,
         allowWrite: flags['allow-write'], allowBilling: flags['allow-billing'],
       }
       await runMcpServer(deps, mcpFlags, deps.mcpIo || defaultStdioIo())
@@ -220,8 +234,7 @@ async function dispatch(argv, deps, io) {
   }
 
   const cfg = config.loadConfig({ profile: flags.profile })
-  const baseUrl = flags.url ? flags.url.replace(/\/+$/, '') : cfg.url
-  const client = makeClient({ url: baseUrl, token: cfg.token })
+  const client = makeClient({ url: cfg.url, token: cfg.token })
 
   switch (cmd) {
     case 'whoami': return handleWhoami(client, flags, io)
@@ -263,7 +276,7 @@ async function getAccount(client) {
 // browser to approve it, then waits for exactly one push event on the deviceCode-scoped
 // SSE subscription (no polling — see client.js subscribePublic / api-my cliAuthSub).
 async function handleLoginDevice(config, makeClient, flags, io) {
-  const url = flags.url ? flags.url.replace(/\/+$/, '') : config.loadConfig({ profile: flags.profile }).url
+  const url = config.loadConfig({ profile: flags.profile }).url
   const client = makeClient({ url, token: '' })
 
   const { cliAuthStart: start } = await client.requestPublic(M_CLI_AUTH_START, { name: `CLI login (${hostname()})` })
@@ -273,7 +286,7 @@ async function handleLoginDevice(config, makeClient, flags, io) {
 
   const result = await waitForApproval(client, start.deviceCode, start.expiresIn)
   // Clear any active sub-account token (see the token-login path above).
-  const path = config.saveConfig({ token: result.token, url: flags.url, subToken: null }, { profile: flags.profile })
+  const path = config.saveConfig({ token: result.token, subToken: null }, { profile: flags.profile })
   io.out(color.green(`Logged in. Saved to ${path}` + (flags.profile ? ` (profile ${flags.profile})` : '')))
   return 0
 }

@@ -21,13 +21,17 @@ afterEach(() => {
 })
 
 describe('save / load round-trip', () => {
-  test('persists token + url to the active profile', () => {
-    config.saveConfig({ token: 'abc', url: 'https://x.y/' })
+  test('persists the token to the active profile', () => {
+    config.saveConfig({ token: 'abc' })
     const cfg = config.loadConfig()
     expect(cfg.token).toBe('abc')
-    expect(cfg.url).toBe('https://x.y') // trailing slash stripped
     expect(cfg.profile).toBe('default')
     expect(cfg.source).toBe('profile:default')
+  })
+  test('a url in the patch is ignored - the host is not configurable', () => {
+    config.saveConfig({ token: 'abc', url: 'https://x.y' })
+    expect(config.loadConfig().url).toBe('https://dcxv.com')
+    expect(config.listProfiles().profiles.default.url).toBeUndefined()
   })
   test('missing file -> empty, source none', () => {
     const cfg = config.loadConfig()
@@ -45,10 +49,13 @@ describe('env precedence', () => {
     expect(cfg.token).toBe('envtok')
     expect(cfg.source).toBe('env')
   })
-  test('DCXV_URL overrides profile url', () => {
-    config.saveConfig({ token: 't', url: 'https://a.b' })
+  test('DCXV_URL cannot move the host', () => {
+    // It used to. The bearer token, the KVM console URL and the payment link all follow
+    // whatever this resolves to, so it is no longer an override at all - and cli.js
+    // refuses to run at all while it is set, rather than silently ignoring it.
+    config.saveConfig({ token: 't' })
     process.env.DCXV_URL = 'https://override.tld'
-    expect(config.loadConfig().url).toBe('https://override.tld')
+    expect(config.loadConfig().url).toBe('https://dcxv.com')
   })
 })
 
@@ -70,13 +77,21 @@ describe('subToken', () => {
 })
 
 describe('v1 migration', () => {
-  test('flat {token,url} file is read as default profile', () => {
+  test('flat {token} file is read as default profile, and a stale url is dropped', () => {
     mkdirSync(join(dir, 'dcxv'), { recursive: true })
     writeFileSync(join(dir, 'dcxv', 'config.json'), JSON.stringify({ token: 'old', url: 'https://old.tld' }))
     const cfg = config.loadConfig()
     expect(cfg.token).toBe('old')
-    expect(cfg.url).toBe('https://old.tld')
+    expect(cfg.url).toBe('https://dcxv.com')
     expect(config.listProfiles().names).toContain('default')
+  })
+
+  test('a v2 profile with a saved url from an older version is ignored, not honored', () => {
+    mkdirSync(join(dir, 'dcxv'), { recursive: true })
+    writeFileSync(join(dir, 'dcxv', 'config.json'),
+      JSON.stringify({ current: 'default', profiles: { default: { token: 'tk', url: 'https://stale.tld' } } }))
+    expect(config.loadConfig().url).toBe('https://dcxv.com')
+    expect(config.loadConfig().token).toBe('tk')
   })
 })
 

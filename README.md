@@ -383,16 +383,18 @@ dcxv sub exit              # back to your own
 | Variable | Purpose |
 |---|---|
 | `DCXV_TOKEN` | API token, instead of logging in |
-| `DCXV_URL` | Override the API base URL (default `https://dcxv.com`) |
 | `DCXV_PROFILE` | Select a saved profile |
 | `DCXV_INSTALL_DIR` | Install location for `install.sh` (default `~/.local/bin`) |
 | `DCXV_WATCH_IDLE_SEC` | Seconds before `watch` reports that nothing is running |
 | `DCXV_WATCH_SILENT_SEC` | Seconds before `watch` warns that no progress arrived |
 
 Config lives in `~/.config/dcxv/config.json` (`chmod 600`), or `$XDG_CONFIG_HOME/dcxv/`.
-A flag beats the environment, which beats the saved profile — so `--url` wins over `DCXV_URL`,
-which wins over the profile's URL. The token has no flag: use `DCXV_TOKEN`, or `dcxv login` to
-save one.
+The token has no flag: use `DCXV_TOKEN`, or `dcxv login` to save one.
+
+The API host is fixed at `https://dcxv.com` and cannot be changed. The `--url` flag and the
+`DCXV_URL` variable were removed — passing either is now an error rather than a silent no-op, so
+a script that relied on one fails loudly instead of quietly talking to a different host than it
+thinks. A `url` left in an existing config file is ignored.
 
 ## Shell completions
 

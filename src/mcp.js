@@ -55,19 +55,18 @@ const TOOL_FLAGS = new Set(['--cluster', '--vcpu', '--ram', '--disk', '--ip', '-
 //          parseArgs consumes as a value even when it looks like an option.
 //   rest - model-supplied positionals. Emitted after `--`, where option parsing is off.
 //
-// --url/--profile are pinned on EVERY call, not just when `dcxv mcp` was invoked with
-// them, so each tool call resolves the SAME account/host the server started against.
-// Previously they were appended only if set, and only last-wins made an injected --url
-// lose; with a bare `dcxv mcp` there was nothing to append and the injected one won.
-// (The original bug this pinning was written for: `dcxv mcp --url <other-host>` still
-// answered from the default profile's account.)
+// --profile is pinned on EVERY call, not just when `dcxv mcp` was invoked with it, so
+// each tool call resolves the SAME account the server started against. (The original
+// bug this pinning was written for: `dcxv mcp --profile x` still answered from the
+// default profile's account.) The host needs no pinning any more - it is fixed in
+// config.js and there is no longer a flag that could move it.
 async function runJson(ctx, cmd, rest = []) {
   const bad = cmd.find((a) => typeof a === 'string' && a.startsWith('-') && !TOOL_FLAGS.has(a))
   if (bad !== undefined) throw new Error(`refusing to run: "${bad}" would be parsed as a flag`)
 
   const out = []
   const err = []
-  const fullArgv = ['--json', '--url', ctx.baseUrl, '--profile', ctx.profileName, ...cmd]
+  const fullArgv = ['--json', '--profile', ctx.profileName, ...cmd]
   if (rest.length) fullArgv.push('--', ...rest.map(String))
   const code = await run(fullArgv, { ...ctx.deps, stdout: (s) => out.push(s), stderr: (s) => err.push(s) })
   if (code !== 0) throw new Error(err.join('\n') || 'command failed')
@@ -326,13 +325,13 @@ function jsonRpcError(id, code, message) {
 // double with the same shape.
 export async function runMcpServer(deps, flags, io) {
   const cfg = deps.config.loadConfig({ profile: flags.profile })
-  const baseUrl = flags.url ? flags.url.replace(/\/+$/, '') : cfg.url
-  // Host and profile resolved ONCE at startup and pinned onto every runJson() call below
-  // (see its own comment) - without this, --url/--profile given to `dcxv mcp` only
-  // affected the token-presence check here and silently reverted to the default
-  // profile/host for every tool call. cfg.profile is the resolved name (never empty),
-  // so this pins the account even when `dcxv mcp` was given no --profile at all.
-  const ctx = { deps, baseUrl, profileName: cfg.profile }
+  // baseUrl is only for the PUBLIC catalog fetches below; authenticated tools go through
+  // runJson -> run(), which resolves the (fixed) host itself. profileName is resolved ONCE
+  // at startup and pinned onto every runJson() call - without it, --profile given to
+  // `dcxv mcp` only affected the token-presence check here and silently reverted to the
+  // default profile for every tool call. cfg.profile is never empty, so this pins the
+  // account even when `dcxv mcp` was given no --profile at all.
+  const ctx = { deps, baseUrl: cfg.url, profileName: cfg.profile }
   const tools = toolsForFlags(flags)
   const byName = new Map(tools.map((t) => [t.name, t]))
 

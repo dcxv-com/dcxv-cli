@@ -1,19 +1,21 @@
 // Config + token resolution for the DCXV CLI.
 //
 // File schema (v2):
-//   { "current": "default", "profiles": { "default": { token, url, subToken } } }
-// A v1 flat file ({ token, url }) is migrated into profiles.default on read.
+//   { "current": "default", "profiles": { "default": { token, subToken } } }
+// A v1 flat file ({ token }) is migrated into profiles.default on read.
 //
 // Token precedence:  DCXV_TOKEN env > active profile subToken > active profile token
-// URL precedence:    DCXV_URL env   > active profile url      > DEFAULT_URL
 // Active profile:    opts.profile   > DCXV_PROFILE env        > file.current > "default"
+//
+// The API host is NOT configurable. It was, through --url, DCXV_URL and a per-profile
+// `url` - three ways to point an authenticated CLI at an arbitrary host, and the bearer
+// token, the KVM console URL and the payment link all follow wherever it points. A `url`
+// left in an existing config file is ignored, not honored (see readFile).
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 
 export const DEFAULT_URL = 'https://dcxv.com'
-
-const normUrl = (u) => (u || DEFAULT_URL).replace(/\/+$/, '')
 
 function configDir() {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
@@ -34,10 +36,10 @@ function readFile() {
   if (raw && typeof raw === 'object' && raw.profiles && typeof raw.profiles === 'object') {
     return { current: raw.current || 'default', profiles: raw.profiles }
   }
-  // v1 flat migration (or empty)
+  // v1 flat migration (or empty). A v1 `url` is deliberately dropped rather than carried
+  // forward - the host is fixed now, so migrating it would only preserve a dead setting.
   const def = {}
   if (raw && raw.token) def.token = raw.token
-  if (raw && raw.url) def.url = normUrl(raw.url)
   return { current: 'default', profiles: { default: def } }
 }
 
@@ -53,26 +55,27 @@ function activeName(file, opts = {}) {
 }
 
 // Resolve the effective { token, url, source, profile, sub } for the active profile.
+// url is always DEFAULT_URL - it stays in the shape because every caller reads it, but
+// nothing can change it.
 export function loadConfig(opts = {}) {
   const file = readFile()
   const name = activeName(file, opts)
   const prof = file.profiles[name] || {}
   const token = process.env.DCXV_TOKEN || prof.subToken || prof.token || ''
-  const url = normUrl(process.env.DCXV_URL || prof.url)
+  const url = DEFAULT_URL
   const source = process.env.DCXV_TOKEN
     ? 'env'
     : (prof.subToken ? 'sub' : (prof.token ? `profile:${name}` : 'none'))
   return { token, url, source, profile: name, sub: !!prof.subToken }
 }
 
-// Merge a patch ({ token?, url?, subToken? }) into the active profile.
-// subToken: pass null to clear it.
+// Merge a patch ({ token?, subToken? }) into the active profile.
+// subToken: pass null to clear it. There is deliberately no `url` - see the header.
 export function saveConfig(patch = {}, opts = {}) {
   const file = readFile()
   const name = activeName(file, opts)
   const prof = file.profiles[name] || (file.profiles[name] = {})
   if (patch.token !== undefined) prof.token = patch.token
-  if (patch.url !== undefined) prof.url = normUrl(patch.url)
   if (patch.subToken !== undefined) {
     if (patch.subToken == null) delete prof.subToken
     else prof.subToken = patch.subToken
