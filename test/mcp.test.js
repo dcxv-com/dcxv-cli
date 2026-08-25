@@ -29,8 +29,12 @@ function harness({ data = {}, token = 't' } = {}) {
   const config = {
     loadConfig: () => ({ token, url: 'https://dcxv.com', profile: 'default', source: token ? 'profile:default' : 'none', sub: false }),
   }
-  const deps = { config, makeClient: () => client, stdout: () => {}, stderr: () => {} }
-  return { deps, calls }
+  // clientArgs records the { url, token } every tool call builds its client from - that
+  // is the thing the argv-injection finding was ultimately about (a bearer sent to an
+  // attacker-chosen host), so it has to be observable, not just the GraphQL ops.
+  const clientArgs = []
+  const deps = { config, makeClient: (a) => { clientArgs.push(a); return client }, stdout: () => {}, stderr: () => {} }
+  return { deps, calls, clientArgs }
 }
 
 // Feeds canned JSON-RPC request lines through runMcpServer() and collects the response
@@ -226,5 +230,103 @@ describe('dcxv mcp — authenticated tools', () => {
     expect(calls.some((c) => c.name === 'productOrder')).toBe(false)
     expect(calls.some((c) => c.name === 'productCalcPrice')).toBe(true)
     delete process.env.DCXV_MCP_ALLOW_BILLING
+  })
+})
+
+// The AUDIT H1 finding: model-supplied values went into argv as positionals, and
+// cli.js's parse() (parseArgs with allowPositionals + strict:false) honors an option
+// wherever it appears. So `id: "--url=https://attacker"` was not an id at all - it set
+// the global --url flag, and dispatch() built the client against that host with the
+// account's real bearer token.
+describe('dcxv mcp — model arguments can never become flags', () => {
+  const call = (name, args) => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } })
+
+  test('the exploit itself: get_order id="--url=<attacker>" is refused before any request', async () => {
+    const { deps, calls, clientArgs } = harness()
+    const [res] = await callMcp(deps, {}, [call('get_order', { id: '--url=https://attacker.example', action: 'ips' })])
+    expect(res.result.isError).toBe(true)
+    expect(res.result.content[0].text).toMatch(/invalid argument "id"/i)
+    expect(calls.length).toBe(0)
+    expect(clientArgs.length).toBe(0) // no client built at all, so no token anywhere
+  })
+
+  test('an id that is a bare boolean flag cannot shift the argv positions', async () => {
+    // ['set','--json','power','start'] would have parsed as positionals
+    // ['set','power','start'] - id becomes "power" and the action word slides over.
+    const { deps, calls } = harness()
+    const [res] = await callMcp(deps, { allowWrite: true }, [call('set_power', { id: '--json', action: 'start' })])
+    expect(res.result.isError).toBe(true)
+    expect(calls.length).toBe(0)
+  })
+
+  test('enum is enforced, not merely declared: set_power action cannot be a flag', async () => {
+    const { deps, calls } = harness()
+    const [res] = await callMcp(deps, { allowWrite: true }, [call('set_power', { id: '1', action: '--url=https://attacker.example' })])
+    expect(res.result.isError).toBe(true)
+    expect(res.result.content[0].text).toMatch(/must be one of/i)
+    expect(calls.length).toBe(0)
+  })
+
+  test('get_order action is enum-checked too', async () => {
+    const { deps, calls } = harness()
+    const [res] = await callMcp(deps, {}, [call('get_order', { id: '1', action: '--profile=other' })])
+    expect(res.result.isError).toBe(true)
+    expect(calls.length).toBe(0)
+  })
+
+  test('rename_order hostname cannot start with a dash', async () => {
+    const { deps, calls } = harness()
+    const [res] = await callMcp(deps, { allowWrite: true }, [call('rename_order', { id: '1', hostname: '--url=https://attacker.example' })])
+    expect(res.result.isError).toBe(true)
+    expect(calls.length).toBe(0)
+  })
+
+  test('create_order values are flag-bound, and a flag-shaped one is rejected outright', async () => {
+    // Defence in depth: parseArgs consumes the token after --cluster as that flag's
+    // value even when it looks like an option (so '--yes' could never have flipped the
+    // price-check into a real charge), but the schema refuses it before that matters.
+    process.env.DCXV_MCP_ALLOW_BILLING = '1'
+    const { deps, calls } = harness()
+    const [res] = await callMcp(deps, { allowWrite: true, allowBilling: true }, [
+      call('create_order', { cluster: '--yes', vcpu: '4', ram: '8', disk: '80', ip: '1', os: 'Ubuntu' }),
+    ])
+    expect(res.result.isError).toBe(true)
+    expect(calls.some((c) => c.name === 'productOrder')).toBe(false)
+    delete process.env.DCXV_MCP_ALLOW_BILLING
+  })
+
+  test('confirm must be a real boolean, so a stringy "true" fails loudly instead of silently price-checking', async () => {
+    process.env.DCXV_MCP_ALLOW_BILLING = '1'
+    const { deps, calls } = harness()
+    const [res] = await callMcp(deps, { allowWrite: true, allowBilling: true }, [
+      call('create_order', { cluster: '16', vcpu: '4', ram: '8', disk: '80', ip: '1', os: 'Ubuntu', confirm: 'true' }),
+    ])
+    expect(res.result.isError).toBe(true)
+    expect(calls.some((c) => c.name === 'productOrder')).toBe(false)
+    delete process.env.DCXV_MCP_ALLOW_BILLING
+  })
+
+  test('the host is pinned to the one the server started against, on every tool call', async () => {
+    const { deps, clientArgs } = harness({ data: { productId: { id: 123, hostname: 'web1' }, productMon: null } })
+    const [res] = await callMcp(deps, {}, [call('get_order', { id: '123' })])
+    expect(res.result.isError).toBeUndefined()
+    expect(clientArgs.length).toBe(1)
+    expect(clientArgs[0].url).toBe('https://dcxv.com')
+    expect(clientArgs[0].token).toBe('t')
+  })
+
+  test('a numeric id is coerced, not rejected — the schema says string, agents send numbers', async () => {
+    const { deps, calls } = harness({ data: { productId: { id: 123, hostname: 'web1' }, productMon: null } })
+    const [res] = await callMcp(deps, {}, [call('get_order', { id: 123 })])
+    expect(res.result.isError).toBeUndefined()
+    expect(calls[0].vars.id).toBe(123)
+  })
+
+  test('legitimate values still reach the handler unchanged, after the -- separator', async () => {
+    const { deps, calls } = harness({ data: { productSet: { id: 1, err: null, ret: 'ok' } } })
+    const [res] = await callMcp(deps, { allowWrite: true }, [call('rename_order', { id: '1', hostname: 'web-1.example.com' })])
+    expect(res.result.isError).toBeUndefined()
+    expect(calls[0].name).toBe('productSet')
+    expect(calls[0].vars.inp.hostname).toBe('web-1.example.com')
   })
 })
