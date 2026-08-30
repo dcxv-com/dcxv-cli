@@ -15,7 +15,7 @@ jobs:
   homebrew:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download macOS release assets
         env:
@@ -53,7 +53,7 @@ jobs:
   chocolatey:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download Windows release assets
         shell: bash
@@ -72,10 +72,15 @@ jobs:
 
       # Requires a CHOCO_API_KEY secret: an API key from a chocolatey.org account with
       # publish rights on the dcxv-cli package id. The very first submission of a new
-      # package id still goes through Chocolatey's manual moderation regardless of this
-      # automation — subsequent version pushes are unattended once that's approved.
+      # package id goes through Chocolatey's manual moderation regardless of this
+      # automation, and — observed on the dcxv-cli 0.7.1/0.7.2 releases — pushing a
+      # *newer* version while that first one is still pending review is rejected with a
+      # 403, not queued. continue-on-error keeps that expected-during-moderation failure
+      # from blocking the release; once the first version clears review, later pushes
+      # succeed and this step goes green again like any other.
       - name: choco pack + push
         shell: pwsh
+        continue-on-error: true
         env:
           CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
         run: |
