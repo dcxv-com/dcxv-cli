@@ -30,14 +30,16 @@ jobs:
       - name: Render Homebrew formula
         run: bash scripts/package-brew-choco.sh homebrew
 
-      # Requires a tap repo at github.com/dcxv-com/homebrew-tap with a Formula/ directory
-      # (create it once — this job only ever pushes an updated dcxv.rb to it) and a
-      # TAP_REPO_TOKEN secret: a PAT with push access to that repo.
+      # Requires a tap repo at github.com/dcxv-com/homebrew-tap and a TAP_REPO_TOKEN
+      # secret: a PAT with push access to that repo. Formula/ is created here if the tap
+      # is empty (a brand-new repo has no commits, so there's nothing to clone into it
+      # yet) rather than assumed to already exist.
       - name: Push formula to dcxv-com/homebrew-tap
         env:
           TAP_REPO_TOKEN: ${{ secrets.TAP_REPO_TOKEN }}
         run: |
           git clone "https://x-access-token:${TAP_REPO_TOKEN}@github.com/dcxv-com/homebrew-tap.git" tap
+          mkdir -p tap/Formula
           cp dist/packaging/homebrew/dcxv.rb tap/Formula/dcxv.rb
           cd tap
           git config user.name "dcxv-cli release bot"
@@ -45,7 +47,8 @@ jobs:
           git add Formula/dcxv.rb
           git diff --cached --quiet && { echo "formula unchanged, nothing to push"; exit 0; }
           git commit -m "dcxv ${{ github.event.release.tag_name }}"
-          git push
+          # Explicit target branch: a fresh empty repo has no HEAD to push against yet.
+          git push origin HEAD:main
 
   chocolatey:
     runs-on: windows-latest
