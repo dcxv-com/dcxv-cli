@@ -70,6 +70,18 @@ curl -fsSL https://dcxv.com/cli/install.sh | sh
 Installs to `~/.local/bin/dcxv`. The script picks the right build for your machine, verifies it
 against the published `SHA256SUMS`, and refuses to install on a mismatch.
 
+**macOS (Homebrew):**
+
+```bash
+brew install dcxv-com/tap/dcxv
+```
+
+**Windows (Chocolatey):**
+
+```powershell
+choco install dcxv-cli
+```
+
 Prefer to do it by hand? Download a binary from <https://dcxv.com/cli>, `chmod +x`, and put it on
 your `PATH`:
 
@@ -176,9 +188,11 @@ dcxv set <id> notify-emails <e>      Expiration-notice recipients
 dcxv set <id> mac <ip> <mac>         Set MAC for an IP
 dcxv set <id> ptr <ip> <ptr>         Set PTR (rDNS) for an IP
 dcxv set <id> upgrade <item> <val>   Change a resource / add-on
+dcxv set <id> snap-ls                List snapshots
 dcxv set <id> snap-add [name]        Create a snapshot
 dcxv set <id> snap-restore <name>    Restore a snapshot                 (--yes)
 dcxv set <id> snap-rem <name>        Delete a snapshot                  (--yes)
+dcxv set <id> backup-ls              List backups
 dcxv set <id> backup-add             Create a backup now
 dcxv set <id> backup-restore <bid>   Restore a backup                   (--yes)
 dcxv set <id> backup-rem <bid>       Delete a backup                    (--yes)

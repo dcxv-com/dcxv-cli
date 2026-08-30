@@ -92,7 +92,9 @@ a published binary and `dcxv version` can never disagree.
 4. Update the version on the download page. `release-sync` fails if it drifts from
    `package.json`.
 5. `gh release create vX.Y.Z --draft`, upload the same `dist/dcxv-*` + `dist/SHA256SUMS`, then
-   publish the release. That publish event is what triggers npm — see [npm](#npm) below.
+   publish the release. That publish event is what triggers npm — see [npm](#npm) below — and
+   also the Homebrew tap and Chocolatey pushes, both automatic like npm; see
+   [Homebrew and Chocolatey](#homebrew-and-chocolatey) below.
 
 ### npm
 
@@ -132,6 +134,29 @@ Two things to know if you touch this:
   A `postinstall` downloader is the other option, but it breaks under `npm ci --ignore-scripts`
   and in sandboxed installs. Neither is worth it while the client is a few files of JavaScript
   with one dependency.
+
+### Homebrew and Chocolatey
+
+Also CI-driven, off the same `on: release: published` trigger as npm —
+`.github/workflows/packages.yml` has one job per package manager. Neither job builds
+anything; both download the release's already-uploaded binary assets + `SHA256SUMS` and run
+`scripts/package-brew-choco.sh`, which stamps `package.json`'s version and the matching
+checksums into the templates under `packaging/` (`homebrew/dcxv.rb.template`,
+`chocolatey/dcxv-cli.nuspec.template` + `chocolatey/tools/chocolateyinstall.ps1.template`).
+
+- **Homebrew**: the rendered `dcxv.rb` is pushed straight to `Formula/dcxv.rb` in the
+  `dcxv-com/homebrew-tap` repo, authenticated with the `TAP_REPO_TOKEN` secret (a PAT with
+  push access to that repo). No moderation gate — a tap is just a git repo we own, so this is
+  live the moment the job finishes.
+- **Chocolatey**: the rendered package is `choco pack`ed and pushed to chocolatey.org with the
+  `CHOCO_API_KEY` secret. Chocolatey's community repository puts a **new** package id through
+  manual moderator review before it's installable — that first submission can take days
+  regardless of this automation. Once `dcxv-cli` has cleared moderation once, subsequent
+  version pushes go out unattended.
+
+Run `bash scripts/package-brew-choco.sh` locally (after `bun run build:all`) to render both
+without pushing anywhere — useful for eyeballing the formula/nuspec, or running
+`brew audit --strict` / `choco pack` + a local `choco install -source .` before trusting CI.
 
 ## Style
 

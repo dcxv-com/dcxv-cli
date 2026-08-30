@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>dcxv-cli</id>
+    <version>__VERSION__</version>
+    <title>dcxv-cli</title>
+    <authors>DCXV INTERNATIONAL LTD</authors>
+    <owners>DCXV INTERNATIONAL LTD</owners>
+    <projectUrl>https://dcxv.com/cli</projectUrl>
+    <licenseUrl>https://github.com/dcxv-com/dcxv-cli/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/dcxv-com/dcxv-cli</projectSourceUrl>
+    <bugTrackerUrl>https://github.com/dcxv-com/dcxv-cli/issues</bugTrackerUrl>
+    <tags>dcxv cli hosting vps cloud dedicated-server kubernetes ipv4 devops terminal</tags>
+    <summary>Manage DCXV servers, orders and payments from the terminal</summary>
+    <description>Manage DCXV servers, orders and payments from the terminal. Ships as a single self-contained binary — no runtime to install.</description>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

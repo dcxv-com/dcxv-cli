@@ -1,0 +1,14 @@
+$ErrorActionPreference = 'Stop'
+
+$packageName = 'dcxv-cli'
+$version     = '__VERSION__'
+$checksum    = '__SHA256_WINDOWS_X64__'
+$url         = "https://github.com/dcxv-com/dcxv-cli/releases/download/v$version/dcxv-windows-x64.exe"
+
+$toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$exePath  = Join-Path $toolsDir 'dcxv.exe'
+
+Get-ChocolateyWebFile -PackageName $packageName -FileFullPath $exePath -Url $url `
+  -Checksum $checksum -ChecksumType 'sha256'
+
+Install-BinFile -Name 'dcxv' -Path $exePath

@@ -12,4 +12,11 @@ const deps = {
   stderr: (line) => process.stderr.write(line + '\n'),
 }
 
-run(process.argv.slice(2), deps).then((code) => process.exit(code))
+// setImmediate defers the hard exit by one event-loop tick so libuv finishes closing
+// handles already mid-teardown (e.g. the fetch() socket from the just-completed request)
+// before the forced exit fires — without it, process.exit() right after a fetch() call
+// crashes on Windows with "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)".
+run(process.argv.slice(2), deps).then((code) => {
+  process.exitCode = code
+  setImmediate(() => process.exit(code))
+})

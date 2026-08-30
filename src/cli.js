@@ -486,6 +486,19 @@ async function handleOrder(client, positionals, flags, io) {
   return handleOrderFlags(client, flags, io)
 }
 
+// Column defs for snapshot/backup listings — shared by `dcxv get <id> snapshots|backups`
+// and the `dcxv set <id> snap-ls|backup-ls` aliases below.
+const SNAP_COLUMNS = [
+  { key: 'name', label: 'NAME' }, { key: 'date', label: 'DATE' }, { key: 'description', label: 'DESCRIPTION' },
+]
+// ProductBackup.date is epoch SECONDS and .size is raw bytes (Product.gql:247-251; same
+// rendering the web panel uses) — both were printed unformatted.
+const BACKUP_COLUMNS = [
+  { key: 'id', label: 'BID' },
+  { key: 'date', label: 'DATE', fmt: (v) => ts(v) },
+  { key: 'size', label: 'SIZE', fmt: (v) => bytesHuman(v) },
+]
+
 // Read-only: full detail, or a specific view (ips/stats/snapshots/backups/iso/kubeconfig).
 async function handleGet(client, positionals, flags, io) {
   const id = positionals[1]
@@ -500,17 +513,9 @@ async function handleGet(client, positionals, flags, io) {
     case 'ips': return handleOrderIps(client, idNum, flags, io)
     case 'stats': return handleOrderStats(client, idNum, flags, io)
     case 'snapshots':
-      return listCommand(client, Q_SNAP_LIST, 'productSnapList', { id: idNum }, flags, io, [
-        { key: 'name', label: 'NAME' }, { key: 'date', label: 'DATE' }, { key: 'description', label: 'DESCRIPTION' },
-      ])
+      return listCommand(client, Q_SNAP_LIST, 'productSnapList', { id: idNum }, flags, io, SNAP_COLUMNS)
     case 'backups':
-      return listCommand(client, Q_BACKUP_LIST, 'productBackupList', { id: idNum }, flags, io, [
-        // ProductBackup.date is epoch SECONDS and .size is raw bytes (Product.gql:247-251;
-        // same rendering the web panel uses) — both were printed unformatted.
-        { key: 'id', label: 'BID' },
-        { key: 'date', label: 'DATE', fmt: (v) => ts(v) },
-        { key: 'size', label: 'SIZE', fmt: (v) => bytesHuman(v) },
-      ])
+      return listCommand(client, Q_BACKUP_LIST, 'productBackupList', { id: idNum }, flags, io, BACKUP_COLUMNS)
     case 'iso':
       return listCommand(client, Q_ISO_LIST, 'productCloudISOList', { id: idNum }, flags, io, [
         { key: 'id', label: 'ID' }, { key: 'filename', label: 'FILENAME' }, { key: 'size', label: 'SIZE' },
@@ -599,6 +604,8 @@ async function handleSet(client, positionals, flags, io) {
       return finishMutation(r, flags, io, `Snapshot "${name}" restore started on ${id}`)
     }
     case 'snap-add': return upgradeCall(client, idNum, 'snap-add', positionals[3] || '', flags, io, `Snapshot add requested on ${id}`)
+    case 'snap-ls':
+      return listCommand(client, Q_SNAP_LIST, 'productSnapList', { id: idNum }, flags, io, SNAP_COLUMNS)
     case 'snap-rem': {
       const name = need(positionals[3], 'dcxv set <id> snap-rem <name>', 'dcxv set 123 snap-rem before-upgrade --yes')
       requireYes(flags, `remove snapshot "${name}"`)
@@ -611,6 +618,8 @@ async function handleSet(client, positionals, flags, io) {
       return finishMutation(r, flags, io, `Backup ${bid} restore started on ${id}`)
     }
     case 'backup-add': return upgradeCall(client, idNum, 'backup-add', '', flags, io, `Backup add requested on ${id}`)
+    case 'backup-ls':
+      return listCommand(client, Q_BACKUP_LIST, 'productBackupList', { id: idNum }, flags, io, BACKUP_COLUMNS)
     case 'backup-rem': {
       const bid = need(positionals[3], 'dcxv set <id> backup-rem <bid>', 'dcxv set 123 backup-rem 45 --yes')
       requireYes(flags, `remove backup ${bid}`)

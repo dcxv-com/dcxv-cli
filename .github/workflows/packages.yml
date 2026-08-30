@@ -1,0 +1,82 @@
+name: Publish Homebrew + Chocolatey packages
+
+# Fires when a GitHub Release is published — same trigger as publish.yml. Binaries and
+# SHA256SUMS are uploaded to the release manually (see CONTRIBUTING.md "Releasing"), not
+# built in CI, so each job here downloads the assets it needs from the just-published
+# release rather than rebuilding them.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "${{ github.event.release.tag_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern 'dcxv-macos-*' --pattern 'SHA256SUMS' \
+            --dir dist
+
+      - name: Render Homebrew formula
+        run: bash scripts/package-brew-choco.sh homebrew
+
+      # Requires a tap repo at github.com/dcxv-com/homebrew-tap with a Formula/ directory
+      # (create it once — this job only ever pushes an updated dcxv.rb to it) and a
+      # TAP_REPO_TOKEN secret: a PAT with push access to that repo.
+      - name: Push formula to dcxv-com/homebrew-tap
+        env:
+          TAP_REPO_TOKEN: ${{ secrets.TAP_REPO_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${TAP_REPO_TOKEN}@github.com/dcxv-com/homebrew-tap.git" tap
+          cp dist/packaging/homebrew/dcxv.rb tap/Formula/dcxv.rb
+          cd tap
+          git config user.name "dcxv-cli release bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Formula/dcxv.rb
+          git diff --cached --quiet && { echo "formula unchanged, nothing to push"; exit 0; }
+          git commit -m "dcxv ${{ github.event.release.tag_name }}"
+          git push
+
+  chocolatey:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "${{ github.event.release.tag_name }}" \
+            --repo "${{ github.repository }}" \
+            --pattern 'dcxv-windows-x64.exe' --pattern 'SHA256SUMS' \
+            --dir dist
+
+      - name: Render Chocolatey package
+        shell: bash
+        run: bash scripts/package-brew-choco.sh chocolatey
+
+      # Requires a CHOCO_API_KEY secret: an API key from a chocolatey.org account with
+      # publish rights on the dcxv-cli package id. The very first submission of a new
+      # package id still goes through Chocolatey's manual moderation regardless of this
+      # automation — subsequent version pushes are unattended once that's approved.
+      - name: choco pack + push
+        shell: pwsh
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          cd dist/packaging/chocolatey
+          choco pack
+          $pkg = Get-ChildItem *.nupkg | Select-Object -First 1
+          choco push $pkg.Name --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY

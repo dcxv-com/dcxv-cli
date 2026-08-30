@@ -695,6 +695,11 @@ describe('product extras', () => {
     await exec(h, 'get', '1', 'snapshots')
     expect(outStr(h)).toContain('s1')
   })
+  test('snap-ls is an alias for "get <id> snapshots"', async () => {
+    const h = harness({ data: { productSnapList: [{ name: 's1', date: 'd', description: 'x' }] } })
+    await exec(h, 'set', '1', 'snap-ls')
+    expect(outStr(h)).toContain('s1')
+  })
   test('snap-restore --yes', async () => {
     const h = harness({ data: { productSnapRestore: { id: 1, ret: 'ok' } } })
     expect(await exec(h, 'set', '1', 'snap-restore', 's1', '--yes')).toBe(0)
@@ -712,6 +717,13 @@ describe('product extras', () => {
     expect(out).not.toContain('12884901888')
     expect(out).toContain(ts(1754524800))
     expect(out).not.toContain('1754524800')
+  })
+  test('backup-ls is an alias for "get <id> backups"', async () => {
+    const h = harness({ data: { productBackupList: [{ id: 7, date: 1754524800, size: 12884901888 }] } })
+    await exec(h, 'set', '1', 'backup-ls')
+    const out = outStr(h)
+    expect(out).toContain('7')
+    expect(out).toContain('12 GB')
   })
   test('iso-mount', async () => {
     const h = harness({ data: { productCloudISO: { filename: 'x.iso' } } })
