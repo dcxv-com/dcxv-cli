@@ -3,17 +3,20 @@
   <metadata>
     <id>dcxv-cli</id>
     <version>__VERSION__</version>
-    <title>dcxv-cli</title>
+    <title>DCXV CLI</title>
     <authors>DCXV INTERNATIONAL LTD</authors>
     <owners>DCXV INTERNATIONAL LTD</owners>
     <projectUrl>https://dcxv.com/cli</projectUrl>
+    <iconUrl>https://dcxv.com/favicon.png</iconUrl>
     <licenseUrl>https://github.com/dcxv-com/dcxv-cli/blob/main/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <projectSourceUrl>https://github.com/dcxv-com/dcxv-cli</projectSourceUrl>
+    <packageSourceUrl>https://github.com/dcxv-com/dcxv-cli/tree/main/packaging/chocolatey</packageSourceUrl>
     <bugTrackerUrl>https://github.com/dcxv-com/dcxv-cli/issues</bugTrackerUrl>
     <tags>dcxv cli hosting vps cloud dedicated-server kubernetes ipv4 devops terminal</tags>
     <summary>Manage DCXV servers, orders and payments from the terminal</summary>
     <description>Manage DCXV servers, orders and payments from the terminal. Ships as a single self-contained binary — no runtime to install.</description>
+    <releaseNotes>https://github.com/dcxv-com/dcxv-cli/releases</releaseNotes>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />
