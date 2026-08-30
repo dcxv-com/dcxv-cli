@@ -1,8 +1,8 @@
 name: Publish to npm
 
-# Fires when a GitHub Release is published (matches the existing draft-then-publish
-# flow: bump package.json, commit, `gh release create vX.Y.Z --draft`, upload assets,
-# then publish the release). No token is stored here — npm's Trusted Publishing (OIDC)
+# Fires when a GitHub Release is published (matches deploy.sh's flow: bump package.json,
+# commit, `gh release create vX.Y.Z`, upload assets — published immediately, no draft
+# step). No token is stored here — npm's Trusted Publishing (OIDC)
 # exchanges this workflow's GitHub identity for a short-lived publish credential at
 # publish time, so there is nothing to rotate or leak. Configure the trust relationship
 # once at https://www.npmjs.com/package/dcxv-cli/access -> Trusted Publisher: GitHub

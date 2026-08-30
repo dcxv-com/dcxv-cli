@@ -13,7 +13,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TARGET="${1:-all}"
-VER=$(bun -e 'console.log(require("./package.json").version)')
+# node, not bun: CI runs this on plain ubuntu-latest/windows-latest runners (no bun setup
+# step, unlike build.sh's job) — node -p is what deploy.sh already uses for the same read.
+VER=$(node -p "require('./package.json').version")
 SUMS=dist/SHA256SUMS
 [ -f "$SUMS" ] || { echo "missing $SUMS — run 'bun run build:all' or download release assets first" >&2; exit 1; }
 

@@ -85,16 +85,22 @@ a published binary and `dcxv version` can never disagree.
 
 ## Releasing
 
+`./deploy.sh [patch|minor|major]` (default: `minor`) does steps 1, 2 and 5 below in one go —
+bump, build, commit, push, and a published (not draft) GitHub Release with the binaries
+attached. Steps 3–4 are still manual, since they're on the website, a separate repo:
+
 1. Bump `version` in `package.json` and commit.
 2. `bun test` must be green, then `bun run build:all`.
 3. Publish `dist/dcxv-*` and `dist/SHA256SUMS` to <https://dcxv.com/cli/> so `install.sh` can
    fetch them.
 4. Update the version on the download page. `release-sync` fails if it drifts from
    `package.json`.
-5. `gh release create vX.Y.Z --draft`, upload the same `dist/dcxv-*` + `dist/SHA256SUMS`, then
-   publish the release. That publish event is what triggers npm — see [npm](#npm) below — and
-   also the Homebrew tap and Chocolatey pushes, both automatic like npm; see
-   [Homebrew and Chocolatey](#homebrew-and-chocolatey) below.
+5. `gh release create vX.Y.Z`, uploading `dist/dcxv-*` + `dist/SHA256SUMS`. Publishing the
+   release is what triggers npm — see [npm](#npm) below — and also the Homebrew tap and
+   Chocolatey pushes, both automatic like npm; see
+   [Homebrew and Chocolatey](#homebrew-and-chocolatey) below. `deploy.sh` publishes
+   immediately rather than creating a draft, so double-check the working tree before running
+   it — none of the three publish steps it triggers can be undone.
 
 ### npm
 
@@ -118,10 +124,10 @@ trust relationship is configured once on npm's side: <https://www.npmjs.com/pack
 at the `npm publish` step with an auth error, not silently.
 
 So the actual release flow is: bump `version` in `package.json` and commit → `bun run build:all`
-→ `gh release create vX.Y.Z --draft`, upload `dist/dcxv-*` + `dist/SHA256SUMS` → publish the
-draft release. Publishing the release is what triggers the npm publish; there is no separate
-manual `npm publish` step to remember (or forget). `npm publish --dry-run` locally is still
-useful to eyeball the tarball contents before tagging.
+→ `gh release create vX.Y.Z`, upload `dist/dcxv-*` + `dist/SHA256SUMS` (`deploy.sh` does all of
+this). Publishing the release is what triggers the npm publish; there is no separate manual
+`npm publish` step to remember (or forget). `npm publish --dry-run` locally is still useful to
+eyeball the tarball contents before tagging.
 
 Two things to know if you touch this:
 
