@@ -426,7 +426,7 @@ dcxv completion fish > ~/.config/fish/completions/dcxv.fish
 
 ## Contributing
 
-Bug reports and patches are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development
+Bug reports and patches are welcome. See [CONTRIBUTING.md](PROJECT.md) for the development
 setup, test suites and release process.
 
 ## Support
