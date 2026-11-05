@@ -214,6 +214,19 @@ describe('dcxv mcp — authenticated tools', () => {
     expect(calls[0].vars.inp.cmd).toBe('RESET')
   })
 
+  test('lock_order and renew_order pass --yes (the tool gate is the confirmation) and reach productSet', async () => {
+    process.env.DCXV_MCP_ALLOW_BILLING = '1'
+    for (const [name, field] of [['lock_order', 'blocked'], ['renew_order', 'renew']]) {
+      const { deps, calls } = harness({ data: { productSet: { id: 1, err: null } } })
+      const [res] = await callMcp(deps, { allowWrite: true, allowBilling: true }, [
+        { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { id: '1' } } },
+      ])
+      expect(res.result.isError).toBeUndefined()
+      expect(calls[0].vars.inp[field]).toBe(true)
+    }
+    delete process.env.DCXV_MCP_ALLOW_BILLING
+  })
+
   test('create_order without confirm:true only checks price, does not order', async () => {
     process.env.DCXV_MCP_ALLOW_BILLING = '1'
     const { deps, calls } = harness({

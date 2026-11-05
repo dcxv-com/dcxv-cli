@@ -243,7 +243,8 @@ const WRITE_TOOLS = [
       },
       required: ['id', 'action'],
     },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'power', args.action])),
+    // --yes before '--' (after it, it would be a positional): the tool gate is the confirmation
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set', ...(args.action === 'start' ? [] : ['--yes'])], [args.id, 'power', args.action])),
   },
   {
     name: 'rename_order',
@@ -255,7 +256,7 @@ const WRITE_TOOLS = [
     name: 'lock_order',
     description: 'Lock a server against changes (client-side lock, reversible with unlock_order).',
     inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: ID } }, required: ['id'] },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'lock'])),
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set', '--yes'], [args.id, 'lock'])),
   },
   {
     name: 'unlock_order',
@@ -299,7 +300,7 @@ const BILLING_TOOLS = [
     name: 'renew_order',
     description: 'Renew a server immediately. Charges the account with no undo.',
     inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: ID } }, required: ['id'] },
-    run: async (args, ctx) => textResult(await runJson(ctx, ['set'], [args.id, 'renew'])),
+    run: async (args, ctx) => textResult(await runJson(ctx, ['set', '--yes'], [args.id, 'renew'])),
   },
 ]
 

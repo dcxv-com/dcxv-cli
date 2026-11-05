@@ -50,7 +50,7 @@ export const Q_PRODUCT_DETAIL = `query($id: Int!) {
   productId(id: $id) {
     id vid type created installed next_pay min_months active autoprolong
     blocked blocked_reason intest name cpu cores ram hdd hdd2 hdd3 hdd4 mobo
-    bw ipcnt autoreboot ip ips { ip mac ptr } mac backup snaps hostname os iso
+    bw ipcnt autoreboot ip ips { ip mac ptr } mac backup backup_freq snaps hostname os iso
     client_notes login pass price discount smtp notify_emails notice_to_client
     pxe_install pxe_recovery ipmi meta admin_packet admin_used k8s k8sStatus k8sKubeconfig
   }

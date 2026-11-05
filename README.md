@@ -177,25 +177,25 @@ dcxv os [filter...]                  Available OS images
 dcxv clusters [filter...]            Available clusters / price tiers
 dcxv order --cluster … --vcpu …      Order a server (dry-run unless --yes)
 
-dcxv set <id> power <cmd>            start | stop | shutdown | reset | pass
+dcxv set <id> power <cmd>            start | stop | shutdown | reset | pass (--yes, not for start)
 dcxv set <id> reinstall <os|id>      Reinstall the OS                   (--yes, --watch)
 dcxv set <id> rename <hostname>      Rename the server
-dcxv set <id> password [<pass>]      Set a password (generates one if omitted)
-dcxv set <id> renew                  Renew now (charges balance)
+dcxv set <id> password [<pass>]      Set a password (generates one if omitted)  (--yes)
+dcxv set <id> renew                  Renew now (charges balance)        (--yes)
 dcxv set <id> autoprolong <on|off>   Toggle auto-renew
-dcxv set <id> lock | unlock          Lock / unlock the server
+dcxv set <id> lock | unlock          Lock / unlock the server           (lock: --yes)
 dcxv set <id> notify-emails <e>      Expiration-notice recipients
 dcxv set <id> mac <ip> <mac>         Set MAC for an IP
 dcxv set <id> ptr <ip> <ptr>         Set PTR (rDNS) for an IP
-dcxv set <id> upgrade <item> <val>   Change a resource / add-on
+dcxv set <id> upgrade <item> <val>   Change a resource / add-on         (--yes)
 dcxv set <id> snap-ls                List snapshots
-dcxv set <id> snap-add [name]        Create a snapshot
+dcxv set <id> snap-add [name]        Create a snapshot (charges)        (--yes)
 dcxv set <id> snap-restore <name>    Restore a snapshot                 (--yes)
 dcxv set <id> snap-rem <name>        Delete a snapshot                  (--yes)
 dcxv set <id> backup-ls              List backups
-dcxv set <id> backup-add             Create a backup now
+dcxv set <id> backup-plan <n> <freq> Keep n (0-7) copies, daily|weekly|monthly (--yes)
+dcxv set <id> backup-new             Back up now, replacing the oldest copy (--yes)
 dcxv set <id> backup-restore <bid>   Restore a backup                   (--yes)
-dcxv set <id> backup-rem <bid>       Delete a backup                    (--yes)
 dcxv set <id> iso-mount <url> [file] Attach an ISO
 dcxv set <id> iso-rm                 Detach the ISO                     (--yes)
 dcxv rm <id>                         Delete the product                 (--yes)
@@ -257,7 +257,7 @@ When provisioning finishes, the access details and a ready-to-paste `ssh` comman
 | `--disk <n>` | Disk in GB |
 | `--ip <n>` | Number of IPv4 addresses |
 | `--os <name\|id>` | Image — see `dcxv os`. Omit for the newest supported Ubuntu |
-| `--backup <0-7>` | `0`–`6` = copies per week, `7` = daily. Defaults to `0` |
+| `--backup <0-7>` | Backup copies kept, taken weekly (`--set backup_freq=daily\|monthly` to change). Defaults to `0` |
 | `--hostname <h>` | Optional — generated for you if omitted |
 | `--price` | Print the price only, order nothing |
 | `--watch` | With `--yes`, stream progress right after ordering |

@@ -13,9 +13,10 @@ Rules: never print success for something that may not have happened; a failure s
 ## Behaviour
 
 - API host fixed `https://dcxv.com`; `--url` / `DCXV_URL` is an error, config `url` ignored.
-- `--json` on reads; `--yes/-y` required for billing or destructive actions (`order` dry-runs without it). Name args match word-by-word; ambiguity errors with the matches.
+- `--json` on reads; `--yes/-y` required for every billing, destructive or disruptive action (`order` dry-runs without it; `set` renew, upgrade, snap-add, backup-plan, backup-new, lock, password, power except start, plus the restore / remove / reinstall ones; owner rule 2026-11-05). The MCP tools pass `--yes` themselves: their --allow-write / --allow-billing gate is the confirmation. Name args match word-by-word; ambiguity errors with the matches.
 - Env: `DCXV_TOKEN`, `DCXV_PROFILE`, `DCXV_WATCH_IDLE_SEC`, `DCXV_WATCH_SILENT_SEC`, `DCXV_MCP_ALLOW_BILLING`; install.sh `DCXV_INSTALL_DIR` (`~/.local/bin`), `DCXV_BASE_URL` (`https://dcxv.com/cli`).
 - MCP tiers: read-only always; write (`set_power`, rename, lock/unlock) needs `--allow-write`; billing (`create_order`, price-check unless `confirm`; `renew_order`) needs `--allow-write --allow-billing` AND `DCXV_MCP_ALLOW_BILLING=1`. Never exposed: `rm`, `pay`, `account set/export`, `sub login`, `watch`.
+- Cloud backups: `set <id> backup-plan <0-7> <daily|weekly|monthly>` -> `productSet { backup_plan: { backup, freq } }` (validated locally; a bigger plan is charged now for the prepaid months, a smaller one lowers the price from the next renewal); `set <id> backup-new` -> `upgrade: ['backup-new', '']` (replaces the oldest copy, 10% of one copy's monthly price, err `no backup plan` at 0). The api answers `use backup_plan` to the old `backup` / `backup-add` / `backup-rem` upgrade keys. Detail shows `backup (backup_freq)`. Like `renew` / `upgrade`, neither asks for `--yes`.
 - k8s order `--k8s K3S|K0S|K8S|RKE2`: minimums 4 vCPU / 8 GB / 60 GB, raised with a note.
 
 ## API gotchas

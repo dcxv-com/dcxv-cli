@@ -299,7 +299,7 @@ describe('products / order detail', () => {
 describe('set <id> web-parity mutations', () => {
   test('renew', async () => {
     const h = harness({ data: { productSet: { id: 1 } } })
-    expect(await exec(h, 'set', '1', 'renew')).toBe(0)
+    expect(await exec(h, 'set', '1', 'renew', '--yes')).toBe(0)
     expect(callOf(h, 'productSet').vars).toEqual({ inp: { id: 1, renew: true } })
   })
   test('autoprolong on/off', async () => {
@@ -314,7 +314,7 @@ describe('set <id> web-parity mutations', () => {
   })
   test('lock / unlock', async () => {
     const lock = harness({ data: { productSet: { id: 1 } } })
-    await exec(lock, 'set', '1', 'lock')
+    await exec(lock, 'set', '1', 'lock', '--yes')
     expect(callOf(lock, 'productSet').vars).toEqual({ inp: { id: 1, blocked: true } })
     const unlock = harness({ data: { productSet: { id: 1 } } })
     await exec(unlock, 'set', '1', 'unlock')
@@ -334,13 +334,13 @@ describe('set <id> web-parity mutations', () => {
   })
   test('password explicit', async () => {
     const h = harness({ data: { productSet: { id: 1 } } })
-    await exec(h, 'set', '1', 'password', 'MyPass123')
+    await exec(h, 'set', '1', 'password', 'MyPass123', '--yes')
     expect(callOf(h, 'productSet').vars).toEqual({ inp: { id: 1, cmd: 'PASS', pass: 'MyPass123' } })
     expect(outStr(h)).toContain('MyPass123')
   })
   test('password generated when omitted', async () => {
     const h = harness({ data: { productSet: { id: 1 } } })
-    await exec(h, 'set', '1', 'password')
+    await exec(h, 'set', '1', 'password', '--yes')
     const sent = callOf(h, 'productSet').vars.inp.pass
     expect(typeof sent).toBe('string')
     expect(sent.length).toBe(16)
@@ -383,7 +383,7 @@ describe('power control', () => {
   })
   test('backend err -> exit 1', async () => {
     const h = harness({ data: { productSet: { err: 'nope' } } })
-    expect(await exec(h, 'set', '1', 'power', 'stop')).toBe(1)
+    expect(await exec(h, 'set', '1', 'power', 'stop', '--yes')).toBe(1)
     expect(errStr(h)).toContain('Failed: nope')
   })
 })
@@ -686,9 +686,44 @@ describe('destructive gating', () => {
 describe('product extras', () => {
   test('upgrade -> productSet {id,upgrade:[item,value]}', async () => {
     const h = harness({ data: { productSet: { id: 1 } } })
-    expect(await exec(h, 'set', '1', 'upgrade', 'cpu', '8')).toBe(0)
+    expect(await exec(h, 'set', '1', 'upgrade', 'cpu', '8', '--yes')).toBe(0)
     expect(callOf(h, 'productSet').vars).toEqual({ inp: { id: 1, upgrade: ['cpu', '8'] } })
     expect(outStr(h)).toContain('Upgrade cpu=8')
+  })
+  test('backup-plan -> productSet {id,backup_plan:{backup,freq}}', async () => {
+    const h = harness({ data: { productSet: { id: 1, ret: 'OK' } } })
+    expect(await exec(h, 'set', '1', 'backup-plan', '7', 'Daily', '--yes')).toBe(0)
+    expect(callOf(h, 'productSet').vars).toEqual({ inp: { id: 1, backup_plan: { backup: 7, freq: 'daily' } } })
+    expect(outStr(h)).toContain('7 x daily')
+  })
+  test.each([['8', 'daily'], ['-1', 'weekly'], ['1.5', 'weekly'], ['x', 'weekly'], ['3', 'hourly']])(
+    'backup-plan %s %s -> refused locally, no call', async (copies, freq) => {
+      const h = harness({ data: {} })
+      expect(await exec(h, 'set', '1', 'backup-plan', copies, freq, '--yes')).toBe(1)
+      expect(called(h, 'productSet')).toBe(false)
+    })
+  test('backup-plan without freq -> usage, no call', async () => {
+    const h = harness({ data: {} })
+    expect(await exec(h, 'set', '1', 'backup-plan', '3', '--yes')).toBe(1)
+    expect(called(h, 'productSet')).toBe(false)
+  })
+  test('backup-plan 0 weekly is valid (drops the plan)', async () => {
+    const h = harness({ data: { productSet: { id: 1, ret: 'OK' } } })
+    expect(await exec(h, 'set', '1', 'backup-plan', '0', 'weekly', '--yes')).toBe(0)
+    expect(callOf(h, 'productSet').vars.inp.backup_plan).toEqual({ backup: 0, freq: 'weekly' })
+  })
+  test('backup-new -> productSet {id,upgrade:[backup-new,""]}; api err printed verbatim', async () => {
+    const ok = harness({ data: { productSet: { id: 1, ret: 'backup' } } })
+    expect(await exec(ok, 'set', '1', 'backup-new', '--yes')).toBe(0)
+    expect(callOf(ok, 'productSet').vars).toEqual({ inp: { id: 1, upgrade: ['backup-new', ''] } })
+    const no = harness({ data: { productSet: { id: 1, err: 'no backup plan' } } })
+    expect(await exec(no, 'set', '1', 'backup-new', '--yes')).toBe(1)
+    expect(errStr(no)).toContain('no backup plan')
+  })
+  test('detail shows the backup interval from backup_freq', async () => {
+    const h = harness({ data: { productId: { id: 1, type: 'cloud', backup: 3, backup_freq: 'monthly' }, productMon: {} } })
+    await exec(h, 'get', '1')
+    expect(outStr(h)).toContain('3 (monthly)')
   })
   test('snapshots list', async () => {
     const h = harness({ data: { productSnapList: [{ name: 's1', date: 'd', description: 'x' }] } })
@@ -1027,7 +1062,7 @@ describe('sub-accounts', () => {
 describe('null mutation result is a failure, not a success', () => {
   test('productSet null -> exit 1, no success message', async () => {
     const h = harness({ data: { productSet: null } })
-    expect(await exec(h, 'set', '1', 'renew')).toBe(1)
+    expect(await exec(h, 'set', '1', 'renew', '--yes')).toBe(1)
     expect(errStr(h)).toContain('server returned no result')
     expect(outStr(h)).not.toContain('Renewal requested')
   })
@@ -1043,7 +1078,7 @@ describe('null mutation result is a failure, not a success', () => {
   })
   test('password null -> exit 1', async () => {
     const h = harness({ data: { productSet: null } })
-    expect(await exec(h, 'set', '1', 'password')).toBe(1)
+    expect(await exec(h, 'set', '1', 'password', '--yes')).toBe(1)
     expect(outStr(h)).not.toContain('Password set')
   })
   test('userSubAdd null -> exit 1', async () => {
@@ -1053,7 +1088,7 @@ describe('null mutation result is a failure, not a success', () => {
   })
   test('--json still prints the null payload, but exits 1', async () => {
     const h = harness({ data: { productSet: null } })
-    expect(await exec(h, 'set', '1', 'renew', '--json')).toBe(1)
+    expect(await exec(h, 'set', '1', 'renew', '--json', '--yes')).toBe(1)
     expect(outStr(h)).toContain('null')
   })
 })
@@ -1203,5 +1238,34 @@ describe('the API host cannot be moved', () => {
     const h = harness()
     expect(await exec(h, '--url=https://attacker.example', 'version')).toBe(1)
     expect(errStr(h)).toMatch(/--url was removed/)
+  })
+})
+
+describe('--yes on every billing or disruptive command', () => {
+  const cases = [
+    ['renew'], ['lock'], ['password'], ['password', 'MyPass123'],
+    ['power', 'stop'], ['power', 'shutdown'], ['power', 'reset'], ['power', 'restart'], ['power', 'reboot'], ['power', 'pass'],
+    ['snap-add'], ['snap-add', 'before'], ['upgrade', 'ram', '16'], ['backup-plan', '3', 'daily'], ['backup-new'],
+  ]
+  for (const args of cases) {
+    test(`set 1 ${args.join(' ')} without --yes -> refused, no call`, async () => {
+      const h = harness({ data: { productSet: { id: 1 } } })
+      expect(await exec(h, 'set', '1', ...args)).toBe(1)
+      expect(errStr(h)).toContain('without --yes')
+      expect(called(h, 'productSet')).toBe(false)
+    })
+  }
+  test('-y works as --yes; power start and unlock need no confirmation', async () => {
+    const y = harness({ data: { productSet: { id: 1 } } })
+    expect(await exec(y, 'set', '1', 'renew', '-y')).toBe(0)
+    for (const args of [['power', 'start'], ['unlock'], ['autoprolong', 'off'], ['rename', 'web1']]) {
+      const h = harness({ data: { productSet: { id: 1 } } })
+      expect(await exec(h, 'set', '1', ...args)).toBe(0)
+    }
+  })
+  test('a bad backup-plan argument is reported before the --yes refusal', async () => {
+    const h = harness({ data: {} })
+    expect(await exec(h, 'set', '1', 'backup-plan', '9', 'daily')).toBe(1)
+    expect(errStr(h)).toContain('Copies must be')
   })
 })

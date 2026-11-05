@@ -59,24 +59,27 @@ Usage:
   dcxv get <id> stats                          Resource usage charts (CPU/RAM/Net/Disk)
   dcxv get <id> snapshots|backups|iso          List snapshots / backups / ISOs
   dcxv get <id> kubeconfig [outfile]           Download kubeconfig (k8s clusters)
-  dcxv set <id> power <cmd>                    start|stop|shutdown|reset|pass
-  dcxv set <id> renew                          Renew now (charges balance)
+  dcxv set <id> power <cmd>                    start|stop|shutdown|reset|pass (--yes but start)
+  dcxv set <id> renew                          Renew now (charges balance)  (--yes)
   dcxv set <id> autoprolong <on|off>           Toggle auto-renew
-  dcxv set <id> lock | unlock                  Lock/unlock the server
+  dcxv set <id> lock | unlock                  Lock/unlock the server (lock: --yes)
   dcxv set <id> rename <hostname>              Rename the server
   dcxv set <id> notify-emails <emails>         Set expiration-notice e-mails
-  dcxv set <id> password [<pass>]              Set a custom password (generates if omitted)
+  dcxv set <id> password [<pass>]              Set a custom password (generates if omitted) (--yes)
   dcxv set <id> mac <ip> <mac>                 Set MAC for an IP
   dcxv set <id> ptr <ip> <ptr>                 Set PTR (rDNS) for an IP
   dcxv set <id> snap-restore <name>            Restore snapshot            (--yes)
-  dcxv set <id> snap-add [name]                Create a snapshot
+  dcxv set <id> snap-add [name]                Create a snapshot (charges)  (--yes)
   dcxv set <id> snap-rem <name>                Delete a snapshot           (--yes)
   dcxv set <id> backup-restore <bid>           Restore backup              (--yes)
-  dcxv set <id> backup-add                     Create a backup now
-  dcxv set <id> backup-rem <bid>               Delete a backup             (--yes)
+  dcxv set <id> backup-plan <copies> <freq>    Backup plan (--yes): copies 0-7 x daily|weekly|
+                                                monthly (a bigger plan is charged now for
+                                                the prepaid months)
+  dcxv set <id> backup-new                     Back up now, replacing the oldest (--yes)
+                                                (charges 10% of one copy's monthly price)
   dcxv set <id> iso-mount <url> [file]         Attach an ISO
   dcxv set <id> iso-rm                         Remove attached ISO         (--yes)
-  dcxv set <id> upgrade <item> <value>         Change a resource/add-on
+  dcxv set <id> upgrade <item> <value>         Change a resource/add-on (--yes)
   dcxv set <id> reinstall <os|id> [k8s]        Reinstall the OS       (--yes, --watch)
                                                 (os name or id, see "dcxv os")
   dcxv rm <id>                                 Delete the product          (--yes)
@@ -552,7 +555,8 @@ async function handleSet(client, positionals, flags, io) {
   const a = action.toLowerCase()
 
   if (SIMPLE_ACTIONS[a]) {
-    const { fields, msg } = SIMPLE_ACTIONS[a]
+    const { fields, msg, yes } = SIMPLE_ACTIONS[a]
+    if (yes) requireYes(flags, yes(id))
     return productSetAction(client, idNum, fields, flags, io, msg(id))
   }
 
@@ -561,6 +565,8 @@ async function handleSet(client, positionals, flags, io) {
       const cmd = need(positionals[3], 'dcxv set <id> power <start|stop|shutdown|reset|pass>', 'dcxv set 123 power start')
       const key = cmd.toLowerCase()
       if (!CONTROLS[key]) throw new DcxvError(`Unknown power command "${cmd}". Use start|stop|shutdown|reset|restart|reboot|pass.`)
+      // everything but start interrupts the server (or replaces its password)
+      if (key !== 'start') requireYes(flags, `${key} product ${id}`)
       const { productSet } = await client.request(M_PRODUCT_SET, { inp: { id: idNum, cmd: CONTROLS[key] } })
       return finishMutation(productSet, flags, io, `${CONTROLS[key]} sent to product ${id}${productSet?.ret ? ' (' + productSet.ret + ')' : ''}`)
     }
@@ -578,6 +584,7 @@ async function handleSet(client, positionals, flags, io) {
       return productSetAction(client, idNum, { notify_emails: emails }, flags, io, `Notify e-mails updated for ${id}`)
     }
     case 'password': {
+      requireYes(flags, `replace the password of ${id}`)
       const pass = positionals[3] || genPassword()
       const { productSet } = await client.request(M_PRODUCT_SET, { inp: { id: idNum, cmd: 'PASS', pass } })
       if (flags.json) return void io.out(formatJson({ ...productSet, pass }))
@@ -603,7 +610,9 @@ async function handleSet(client, positionals, flags, io) {
       const { productSnapRestore: r } = await client.request(M_SNAP_RESTORE, { id: idNum, name })
       return finishMutation(r, flags, io, `Snapshot "${name}" restore started on ${id}`)
     }
-    case 'snap-add': return upgradeCall(client, idNum, 'snap-add', positionals[3] || '', flags, io, `Snapshot add requested on ${id}`)
+    case 'snap-add':
+      requireYes(flags, `add a snapshot on ${id} (charges the balance)`)
+      return upgradeCall(client, idNum, 'snap-add', positionals[3] || '', flags, io, `Snapshot add requested on ${id}`)
     case 'snap-ls':
       return listCommand(client, Q_SNAP_LIST, 'productSnapList', { id: idNum }, flags, io, SNAP_COLUMNS)
     case 'snap-rem': {
@@ -617,14 +626,20 @@ async function handleSet(client, positionals, flags, io) {
       const { productBackupRestore: r } = await client.request(M_BACKUP_RESTORE, { id: idNum, bid: Number(bid) })
       return finishMutation(r, flags, io, `Backup ${bid} restore started on ${id}`)
     }
-    case 'backup-add': return upgradeCall(client, idNum, 'backup-add', '', flags, io, `Backup add requested on ${id}`)
+    case 'backup-plan': {
+      const usage = ['dcxv set <id> backup-plan <copies> <daily|weekly|monthly>', 'dcxv set 123 backup-plan 7 daily']
+      const copies = Number(need(positionals[3], ...usage))
+      const freq = need(positionals[4], ...usage).toLowerCase()
+      if (!Number.isInteger(copies) || copies < 0 || copies > 7) throw new DcxvError(`Copies must be an integer 0-7.\nExample: ${usage[1]}`)
+      if (!BACKUP_FREQS.includes(freq)) throw new DcxvError(`Unknown interval "${positionals[4]}". Use daily|weekly|monthly.`)
+      requireYes(flags, `change the backup plan of ${id} (a bigger plan charges the balance)`)
+      return productSetAction(client, idNum, { backup_plan: { backup: copies, freq } }, flags, io, `Backup plan set to ${copies} x ${freq} on ${id}`)
+    }
+    case 'backup-new':
+      requireYes(flags, `back up ${id} now (charges the balance)`)
+      return upgradeCall(client, idNum, 'backup-new', '', flags, io, `Backup started on ${id}`)
     case 'backup-ls':
       return listCommand(client, Q_BACKUP_LIST, 'productBackupList', { id: idNum }, flags, io, BACKUP_COLUMNS)
-    case 'backup-rem': {
-      const bid = need(positionals[3], 'dcxv set <id> backup-rem <bid>', 'dcxv set 123 backup-rem 45 --yes')
-      requireYes(flags, `remove backup ${bid}`)
-      return upgradeCall(client, idNum, 'backup-rem', `${bid}`, flags, io, `Backup ${bid} removed on ${id}`)
-    }
     case 'iso-mount': {
       const url = need(positionals[3], 'dcxv set <id> iso-mount <url> [filename]', 'dcxv set 123 iso-mount https://example.com/ubuntu.iso')
       const { productCloudISO: r } = await client.request(M_ISO_MOUNT, { id: idNum, url, filename: positionals[4] || null })
@@ -638,6 +653,7 @@ async function handleSet(client, positionals, flags, io) {
     case 'upgrade': {
       const item = need(positionals[3], 'dcxv set <id> upgrade <item> <value>', 'dcxv set 123 upgrade ram 16')
       const value = needDefined(positionals[4], 'dcxv set <id> upgrade <item> <value>', 'dcxv set 123 upgrade ram 16')
+      requireYes(flags, `upgrade ${item} to ${value} on ${id} (charges the balance)`)
       return upgradeCall(client, idNum, item, `${value}`, flags, io, `Upgrade ${item}=${value} applied to ${id}`)
     }
     case 'reinstall': {
@@ -791,14 +807,16 @@ async function productSetAction(client, idNum, fields, flags, io, okMsg) {
   return finishMutation(productSet, flags, io, okMsg)
 }
 
+const BACKUP_FREQS = ['daily', 'weekly', 'monthly']
+
 const upgradeCall = (client, idNum, item, value, flags, io, okMsg) =>
   productSetAction(client, idNum, { upgrade: [item, value] }, flags, io, okMsg)
 
 // Simple no-extra-argument productSet toggles. Power verbs (start/stop/.../pass)
 // stay in CONTROLS below since their message includes the backend's `ret` value.
 const SIMPLE_ACTIONS = {
-  renew: { fields: { renew: true }, msg: (id) => `Renewal requested for ${id}` },
-  lock: { fields: { blocked: true }, msg: (id) => `Product ${id} locked` },
+  renew: { fields: { renew: true }, msg: (id) => `Renewal requested for ${id}`, yes: id => `renew ${id} (charges the balance)` },
+  lock: { fields: { blocked: true }, msg: (id) => `Product ${id} locked`, yes: id => `lock ${id}` },
   unlock: { fields: { blocked: false }, msg: (id) => `Product ${id} unlocked` },
 }
 
@@ -915,7 +933,7 @@ async function handleOrderDetail(client, id, flags, io) {
     ['Disk', [p.hdd, p.hdd2, p.hdd3, p.hdd4].filter(Boolean).join(' + ')],
     ['Bandwidth', p.type !== 'storage' ? (p.bw || 'Unlimited Shared') : null],
     ['IP count', p.ipcnt],
-    ['Backups', p.backup != null ? `${p.backup} (${p.backup === 7 ? 'daily' : 'weekly'})` : null],
+    ['Backups', p.backup != null ? `${p.backup} (${p.backup_freq || 'weekly'})` : null],
     ['Snapshots', p.snaps],
     ['Storage usage', p.meta?.used ? `${Math.round(p.meta.used / 10.24) / 100} GB` : null],
     ['Admin hours', p.admin_packet > 0 ? `${(+p.admin_used || 0).toFixed(2)} of ${(+p.admin_packet).toFixed(2)}` : null],
