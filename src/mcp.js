@@ -340,7 +340,7 @@ export async function runMcpServer(deps, flags, io) {
 
   async function handle(req) {
     const { id, method, params } = req
-    if (method === 'notifications/initialized') return // notification, no response
+    if (method?.startsWith('notifications/')) return // JSON-RPC: a notification gets no response, even an unknown one
     if (method === 'ping') return write(jsonRpcResult(id, {}))
     if (method === 'initialize') {
       return write(jsonRpcResult(id, {

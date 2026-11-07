@@ -67,6 +67,16 @@ describe('dcxv mcp — protocol basics', () => {
     expect(responses).toEqual([])
   })
 
+  test('any notification, known or not, gets no response; an unknown request still errors', async () => {
+    const { deps } = harness()
+    const res = await callMcp(deps, {}, [
+      { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } },
+      { jsonrpc: '2.0', id: 9, method: 'nope' },
+    ])
+    expect(res.length).toBe(1)
+    expect(res[0].id).toBe(9)
+  })
+
   test('ping returns an empty result', async () => {
     const { deps } = harness()
     const [res] = await callMcp(deps, {}, [{ jsonrpc: '2.0', id: 5, method: 'ping' }])

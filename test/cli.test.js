@@ -657,6 +657,17 @@ describe('destructive gating', () => {
     expect(errStr(h)).toContain('Refusing to delete')
     expect(called(h, 'productRem')).toBe(false)
   })
+  test.each(['abc', '1e3', '0x10', '1.5', '12abc'])('rm with id %s is refused, no call', async (bad) => {
+    const h = harness({ data: { productRem: true } })
+    expect(await exec(h, 'rm', bad, '--yes')).toBe(1)
+    expect(errStr(h)).toContain('Invalid id')
+    expect(h.calls.length).toBe(0)
+  })
+  test('set with a non-numeric id is refused, no call', async () => {
+    const h = harness({ data: {} })
+    expect(await exec(h, 'set', 'abc', 'power', 'stop', '--yes')).toBe(1)
+    expect(h.calls.length).toBe(0)
+  })
   test('rm --yes calls productRem', async () => {
     const h = harness({ data: { productRem: true } })
     expect(await exec(h, 'rm', '1', '--yes')).toBe(0)

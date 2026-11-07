@@ -502,13 +502,19 @@ const BACKUP_COLUMNS = [
   { key: 'size', label: 'SIZE', fmt: (v) => bytesHuman(v) },
 ]
 
+// "abc" / "1e3" / "1.5" were sent as null / 1000 / 1.5 (and "STOP sent" printed)
+const intId = (id) => {
+  if (!/^\d+$/.test(id)) throw new DcxvError(`Invalid id "${id}" (digits only)`)
+  return Number(id)
+}
+
 // Read-only: full detail, or a specific view (ips/stats/snapshots/backups/iso/kubeconfig).
 async function handleGet(client, positionals, flags, io) {
   const id = positionals[1]
   if (!id) throw new DcxvError('Usage: dcxv get <id> [action]\nExample: dcxv get 123 ips')
 
   const action = positionals[2]
-  const idNum = Number(id)
+  const idNum = intId(id)
 
   if (!action) return handleOrderDetail(client, id, flags, io)
 
@@ -551,7 +557,7 @@ async function handleGet(client, positionals, flags, io) {
 async function handleSet(client, positionals, flags, io) {
   const id = need(positionals[1], 'dcxv set <id> <action> [args]', 'dcxv set 123 power start')
   const action = need(positionals[2], 'dcxv set <id> <action> [args]', 'dcxv set 123 power start')
-  const idNum = Number(id)
+  const idNum = intId(id)
   const a = action.toLowerCase()
 
   if (SIMPLE_ACTIONS[a]) {
@@ -623,7 +629,7 @@ async function handleSet(client, positionals, flags, io) {
     case 'backup-restore': {
       const bid = need(positionals[3], 'dcxv set <id> backup-restore <bid>', 'dcxv set 123 backup-restore 45 --yes')
       requireYes(flags, `restore backup ${bid}`)
-      const { productBackupRestore: r } = await client.request(M_BACKUP_RESTORE, { id: idNum, bid: Number(bid) })
+      const { productBackupRestore: r } = await client.request(M_BACKUP_RESTORE, { id: idNum, bid: intId(bid) })
       return finishMutation(r, flags, io, `Backup ${bid} restore started on ${id}`)
     }
     case 'backup-plan': {
@@ -690,7 +696,7 @@ async function handleSet(client, positionals, flags, io) {
 
 async function handleRm(client, positionals, flags, io) {
   const id = need(positionals[1], 'dcxv rm <id>', 'dcxv rm 123 --yes')
-  const idNum = Number(id)
+  const idNum = intId(id)
   requireYes(flags, `delete product ${id}`)
   const data = await client.request(M_PRODUCT_REM, { id: idNum })
   if (flags.json) io.out(formatJson(data))
@@ -878,7 +884,7 @@ function connectionLine(p) {
 // completion, re-read the product to obtain the final connection-ready fields.
 async function showOrderAccessInfo(client, id, io) {
   try {
-    const p = await fetchProductDetail(client, Number(id))
+    const p = await fetchProductDetail(client, intId(id))
     if (!p) return io.err(color.yellow(`Deployment completed, but product ${id} could not be reloaded for access details.`))
     const lines = accessLines(p)
     const command = connectionLine(p)
@@ -892,7 +898,7 @@ async function showOrderAccessInfo(client, id, io) {
 }
 
 async function handleOrderDetail(client, id, flags, io) {
-  const p = await fetchProductDetail(client, Number(id))
+  const p = await fetchProductDetail(client, intId(id))
   if (!p) throw new DcxvError(`Product ${id} not found in your account.`)
   if (flags.json) return void io.out(formatJson(p))
 
@@ -1239,7 +1245,7 @@ async function handleTx(client, positionals, flags, io) {
   if ((positionals[2] || '').toLowerCase() === 'invoice') {
     return handleTxInvoice(client, id, positionals[3], flags, io)
   }
-  const { userTransId } = await client.request(Q_TRANSACTION, { id: Number(id) })
+  const { userTransId } = await client.request(Q_TRANSACTION, { id: intId(id) })
   if (flags.json) return void io.out(formatJson(userTransId))
   if (!userTransId) throw new DcxvError(`Transaction ${id} not found.`)
   io.out(formatTransaction(userTransId))
@@ -1250,7 +1256,7 @@ async function handleTx(client, positionals, flags, io) {
 // additionally downloads the PDF bytes, falling back to the URL if the fetch fails
 // (the link may be signed, or require the browser session).
 async function handleTxInvoice(client, id, outfile, flags, io) {
-  const { userTransIdInvoice: r } = await client.request(M_TRANS_INVOICE, { id: Number(id) })
+  const { userTransIdInvoice: r } = await client.request(M_TRANS_INVOICE, { id: intId(id) })
   if (flags.json) return void io.out(formatJson(r))
   if (!r?.pdf_url) throw new DcxvError(`No invoice available for transaction ${id}.`)
   const url = /^https?:/i.test(r.pdf_url) ? r.pdf_url : client.url + r.pdf_url
@@ -1294,7 +1300,7 @@ async function handlePay(client, positionals, flags, io) {
   const txId = data.userPay
   if (!txId || txId <= 0) throw new DcxvError('Payment could not be created (userPay returned no transaction id).')
 
-  const { userTransId } = await client.request(Q_TRANSACTION, { id: Number(txId) })
+  const { userTransId } = await client.request(Q_TRANSACTION, { id: intId(txId) })
   if (flags.json) return void io.out(formatJson({ id: txId, ...userTransId }))
   io.out(color.green(`Payment #${txId} created — ${money(amount, u.sign)} via ${method}`))
   io.out(userTransId ? formatTransaction(userTransId) : color.dim(`Open ${u.url || 'https://dcxv.com'}/my/payment/${txId} to complete.`))
@@ -1323,7 +1329,7 @@ async function handleSub(client, config, positionals, flags, io) {
     case 'login': {
       const id = positionals[2]
       if (!id) throw new DcxvError('Usage: dcxv sub login <id>')
-      const { userSubLogin: r } = await client.request(M_SUB_LOGIN, { id: Number(id) })
+      const { userSubLogin: r } = await client.request(M_SUB_LOGIN, { id: intId(id) })
       if (r?.err || !r?.token) throw new DcxvError(`Sub-account login failed: ${r?.err || 'no token returned'}`)
       config.saveConfig({ subToken: r.token }, { profile: flags.profile })
       return void io.out(color.green(`Switched into sub-account ${r.id} <${r.email}>. Run "dcxv sub exit" to return.`))
@@ -1373,7 +1379,7 @@ const WATCH_SILENT_SEC = () => Number(process.env.DCXV_WATCH_SILENT_SEC || 60)
 // metadata instead of attaching, for scripting/debugging.
 async function handleConsole(client, positionals, flags, io) {
   const id = need(positionals[1], 'dcxv console <id>', 'dcxv console 123')
-  const idNum = Number(id)
+  const idNum = intId(id)
 
   if (flags.vnc) {
     const url = await mintKvmUrl(client, { id: idNum, type: 'KVM' })
