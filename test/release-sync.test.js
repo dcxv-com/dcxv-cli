@@ -163,3 +163,19 @@ describe('release sync — published site assets', () => {
     expect(listed).toEqual(BUILD_LINES.map(b => b.asset).sort())
   })
 })
+
+describe('release sync — site version', () => {
+  const deploySh = readFileSync(new URL('../deploy.sh', import.meta.url), 'utf8')
+  const www = new URL('../../dcxv-www/', import.meta.url)
+
+  test('deploy.sh writes the version into dcxv-www after the release', () => {
+    expect(deploySh).toContain('scripts/site-version.sh')
+    expect(deploySh.indexOf('gh release create')).toBeLessThan(deploySh.indexOf('scripts/site-version.sh'))
+  })
+
+  test('the two version lines site-version.sh rewrites exist in dcxv-www (skips without it)', () => {
+    if (!existsSync(www)) return
+    expect(readFileSync(new URL('src/routes/[[lang]]/cli/+page.svelte', www), 'utf8')).toMatch(/^ {2}const VERSION = '\d+\.\d+\.\d+'/m)
+    expect(readFileSync(new URL('src/lib/catalog/index.js', www), 'utf8')).toMatch(/^const DCXV_CLI_VERSION = '\d+\.\d+\.\d+'/m)
+  })
+})

@@ -34,7 +34,7 @@ Rules: never print success for something that may not have happened; a failure s
 ## Build / release
 
 - `bun run build` -> `dist/dcxv` (compiled snapshot: rebuild before testing the binary); `build:all` -> linux x64/arm64, macos arm64/x64, windows x64 + `dist/SHA256SUMS`, stamps `src/version.js`.
-- `./deploy.sh [patch|minor|major]` (default minor): bump, build, commit, push, GitHub Release. Irreversible (triggers npm, brew, choco). Then manually put `dist/dcxv-*` + `SHA256SUMS` on dcxv.com/cli/ (install.sh source) and bump the download page version.
+- `./deploy.sh [patch|minor|major]` (default minor): bump, build, commit, push, GitHub Release. Irreversible (triggers npm, brew, choco). Then it writes the version into dcxv-www (`scripts/site-version.sh`: `/cli` page `const VERSION` + `DCXV_CLI_VERSION` of the MCP server card, one commit of those two files, `pull --rebase` + push = the site deploys). No binary upload: dcxv.com/cli/dcxv-* redirects to the latest GitHub Release.
 - On release: `.github/workflows/publish.yml` (test, tag == version, `npm publish --provenance` via OIDC Trusted Publishing, no `NPM_TOKEN`); `packages.yml` runs `scripts/package-brew-choco.sh` -> `dcxv-com/homebrew-tap` `Formula/dcxv.rb` (`TAP_REPO_TOKEN`) and choco push (`CHOCO_API_KEY`). `bin` must be `bin/dcxv.js` without `./`; `npx` runs `src/` under Node.
 
 ## Open

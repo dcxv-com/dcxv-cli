@@ -48,7 +48,18 @@ gh release create "$VER" \
 echo
 echo "Published $VER. npm publish, the Homebrew tap push, and the Chocolatey push are"
 echo "now running - see the Actions tab."
-echo
-echo "Reminder: bump DCXV_CLI_VERSION in dcxv-www's src/lib/catalog/index.js"
-echo "(the MCP server card at /.well-known/mcp/server-card.json) to ${VER#v} by hand -"
-echo "that's a separate repo and cannot be updated from here."
+
+# 3) The download page and the MCP server card of dcxv-www name the released version. The binaries
+# need no upload: dcxv.com/cli/dcxv-* redirects to the latest GitHub Release. Pushing dcxv-www
+# deploys the site (CI), so it is a separate commit with only these two files.
+WWW="../dcxv-www"
+if [ -d "$WWW/.git" ]; then
+  sh scripts/site-version.sh "${VER#v}" "$WWW"
+  git -C "$WWW" add "src/routes/[[lang]]/cli/+page.svelte" src/lib/catalog/index.js
+  git -C "$WWW" commit -m "cli page and MCP server card: dcxv-cli ${VER#v}"
+  git -C "$WWW" pull --rebase --autostash
+  git -C "$WWW" push
+else
+  echo "dcxv-www not found at $WWW: set const VERSION in its src/routes/[[lang]]/cli/+page.svelte and"
+  echo "DCXV_CLI_VERSION in src/lib/catalog/index.js to ${VER#v} by hand."
+fi
