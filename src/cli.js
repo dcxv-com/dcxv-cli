@@ -828,11 +828,15 @@ const SIMPLE_ACTIONS = {
 
 // Same charset/length as the web app's genPassword (Calculators.svelte-adjacent
 // order page), reimplemented with node:crypto instead of Web Crypto for Node 18 support.
-function genPassword(len = 16) {
+export function genPassword(len = 16) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_'
-  const bytes = randomBytes(len)
-  let out = ''
-  for (let i = 0; i < len; i++) out += chars[bytes[i] % chars.length]
+  let out
+  // api-my refuses fewer than 3 of upper / lower / digit / symbol: draw again until upper, lower and a digit are in
+  do {
+    const bytes = randomBytes(len)
+    out = ''
+    for (let i = 0; i < len; i++) out += chars[bytes[i] % chars.length]
+  } while (len >= 3 && !(/[A-Z]/.test(out) && /[a-z]/.test(out) && /[0-9]/.test(out)))
   return out
 }
 

@@ -1,5 +1,5 @@
 import { test, expect, describe, beforeEach, afterEach } from 'bun:test'
-import { run } from '../src/cli.js'
+import { run, genPassword } from '../src/cli.js'
 import * as Q from '../src/queries.js'
 import { ts } from '../src/output.js'
 import { VERSION } from '../src/version.js'
@@ -344,6 +344,7 @@ describe('set <id> web-parity mutations', () => {
     const sent = callOf(h, 'productSet').vars.inp.pass
     expect(typeof sent).toBe('string')
     expect(sent.length).toBe(16)
+    expect(sent).toMatch(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])/)
   })
   test('mac / ptr', async () => {
     const mac = harness({ data: { productSet: { id: 1 } } })
@@ -1278,5 +1279,13 @@ describe('--yes on every billing or disruptive command', () => {
     const h = harness({ data: {} })
     expect(await exec(h, 'set', '1', 'backup-plan', '9', 'daily')).toBe(1)
     expect(errStr(h)).toContain('Copies must be')
+  })
+})
+
+describe('genPassword', () => {
+  test('always upper, lower and a digit: api-my refuses fewer than 3 categories', () => {
+    for (let i = 0; i < 5000; i++) expect(genPassword()).toMatch(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])/)
+    expect(genPassword()).toHaveLength(16)
+    expect(genPassword(2)).toHaveLength(2)
   })
 })
